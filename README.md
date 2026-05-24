@@ -10,6 +10,8 @@ A free, **code-first live-coding music rig** for Windows — describe a beat in 
 
 ## Screenshots
 
+![Astro's Beatbox in action](docs/demo.gif)
+
 | Live dashboard | Step sequencer (channel rack) |
 |---|---|
 | ![dashboard](docs/01-dashboard.png) | ![step sequencer](docs/03-stepgrid.png) |
