@@ -11,7 +11,7 @@
 (
 // env vars (~x), NOT `var` — `var` is illegal inside a top-level ( ) block and
 // breaks the whole file's compile (then scsynth never boots).
-~devFile = "C:/Users/thr3e/livecoding/audio_device.txt";
+if(~devFile.isNil) { ~devFile = "audio_device.txt" };  // real path injected by the MCP before .load
 ~dev = if(File.exists(~devFile)) { File.readAllString(~devFile).stripWhiteSpace } { "" };
 s = Server.default;
 // WASAPI direct (not FlexASIO/ASIO): ASIO's callback needs a message pump that a

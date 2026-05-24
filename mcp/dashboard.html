@@ -733,6 +733,18 @@
   function poll(){ fetch("/state").then(function(r){return r.json();}).then(render).catch(function(){
     document.getElementById("engstate").textContent="disconnected"; document.getElementById("engdot").className="dot error"; }); }
   setInterval(poll,90); poll(); loadSetList();
+
+  // deep-link: open a panel straight from the URL hash (e.g. .../#steps, #cheats, #curves)
+  (function(){ var h=(location.hash||"").slice(1).toLowerCase();
+    if(h==="cheats") openCheats();
+    else if(h==="samples") openSamples();
+    else if(h==="curves") openCurves();
+    else if(h==="steps"){
+      var on=function(a,ix){ if(a) ix.forEach(function(i){ a.steps[i]=true; }); };
+      on(seq[0],[0,4,8,12]); on(seq[1],[4,12]); on(seq[2],[0,2,4,6,8,10,12,14]); on(seq[3],[2,10]);
+      openSteps();
+    }
+  })();
 </script>
 </body>
 </html>

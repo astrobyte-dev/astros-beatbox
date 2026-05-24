@@ -3,7 +3,7 @@
 # Readiness proven by scsynth process + an execution-only marker (built via ++ so the
 # echoed source text can't match it).
 $exe = "C:\Program Files\SuperCollider-3.14.1\sclang.exe"
-$outFile = "C:\Users\thr3e\livecoding\sc\interactive.log"
+$outFile = "$PSScriptRoot\interactive.log"
 if (Test-Path $outFile) { Remove-Item $outFile -Force }
 New-Item -ItemType File -Path $outFile | Out-Null
 

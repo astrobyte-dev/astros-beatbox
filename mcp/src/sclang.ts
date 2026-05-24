@@ -1,5 +1,5 @@
 import { ProcDriver } from "./proc.js";
-import { SCLANG, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, FORM_FEED } from "./config.js";
+import { SCLANG, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, FORM_FEED, AUDIO_DEVICE_FILE } from "./config.js";
 
 // Drives a headless sclang interpreter (the SuperDirt audio engine).
 // IMPORTANT: evaluate code by sending  <code>\n <0x0C>\n  and keep stdin open;
@@ -22,7 +22,10 @@ export class Sclang extends ProcDriver {
     // Use .load (not raw stdin eval): sending the multi-line file via stdin+form-feed
     // mis-parses `var`/comments; .load compiles the whole file like the IDE does.
     const path = SUPERDIRT_STARTUP.replace(/\\/g, "/");
-    this.eval(`"${path}".load;`);
+    // tell the startup where the audio-device file lives (keeps the user's path out
+    // of the committed .scd; the .scd uses ~devFile if set, else a relative fallback).
+    const dev = AUDIO_DEVICE_FILE.replace(/\\/g, "/");
+    this.eval(`~devFile = "${dev}"; "${path}".load;`);
     await this.waitFor(SUPERDIRT_READY, timeoutMs);
   }
 }

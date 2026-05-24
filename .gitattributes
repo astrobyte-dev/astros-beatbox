@@ -1,0 +1,9 @@
+# Normalize line endings: store LF in the repo, check out native on Windows.
+* text=auto eol=lf
+
+# Windows scripts stay CRLF
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.wav binary

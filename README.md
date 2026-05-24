@@ -8,6 +8,18 @@ A free, **code-first live-coding music rig** for Windows — describe a beat in 
 
 ---
 
+## Screenshots
+
+| Live dashboard | Step sequencer (channel rack) |
+|---|---|
+| ![dashboard](docs/01-dashboard.png) | ![step sequencer](docs/03-stepgrid.png) |
+
+Each instrument gets its own wavelength colour. Built-in cheat sheet — clickable Tidal snippets, genre starters, build-ups & drops:
+
+![cheat sheet](docs/02-cheatsheet.png)
+
+---
+
 ## Features
 
 - Live `d1`–`d16` layer cards with code, plain-English explanations, and per-layer knobs

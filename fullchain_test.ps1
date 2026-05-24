@@ -3,9 +3,9 @@
 $ErrorActionPreference = "Continue"
 $sclang = "C:\Program Files\SuperCollider-3.14.1\sclang.exe"
 $ghci   = "C:\ghcup\bin\ghci.exe"
-$boottidal = "C:\Users\thr3e\livecoding\tidal\BootTidal.hs"
-$scLog  = "C:\Users\thr3e\livecoding\sc_fc.log"
-$tdLog  = "C:\Users\thr3e\livecoding\tidal_fc.log"
+$boottidal = "$PSScriptRoot\tidal\BootTidal.hs"
+$scLog  = "$PSScriptRoot\sc_fc.log"
+$tdLog  = "$PSScriptRoot\tidal_fc.log"
 foreach ($f in @($scLog,$tdLog)) { if (Test-Path $f) { Remove-Item $f -Force }; New-Item -ItemType File -Path $f | Out-Null }
 
 $env:PATH = "C:\ghcup\bin;C:\ghcup\msys64\mingw64\bin;" + $env:PATH
