@@ -1,0 +1,19 @@
+# dependencies & build output (regenerated via `npm install && npm run build`)
+mcp/node_modules/
+mcp/dist/
+
+# recordings & renders (personal / large audio)
+recordings/
+render/
+*.wav
+
+# machine-specific / runtime
+audio_device.txt
+*.log
+sc_fc.log
+tidal_fc.log
+
+# editor / OS
+.vscode/
+Thumbs.db
+.DS_Store

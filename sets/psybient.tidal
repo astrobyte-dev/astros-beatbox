@@ -1,0 +1,22 @@
+-- Slow psybient groove — 75 BPM, half-time, 28-bar evolving arc
+-- (built with Claude, 2026-05-24)
+
+setcps (75/60/4)
+
+-- deep, soft half-time kick (beats 1 & 3), low-passed round
+d1 $ s "bd ~ ~ ~ bd ~ ~ ~" # gain 0.95 # cutoff 700
+
+-- round filtered sub bass, slow movement
+d2 $ note "c2 ~ ~ ~ af1 ~ ~ ~" # s "supersaw" # gain 0.5 # cutoff 320 # resonance 0.1 # legato 1.4
+
+-- THE 28-BAR ARC: 7 chords x 4 bars each, with a slow breathing filter
+d3 $ slow 28 $ note "<c'min9 af'maj7 ef'maj9 bf'min7 g'min7 df'maj7 ef'maj9>" # s "supersaw" # gain 0.38 # cutoff (range 500 2200 (slow 14 sine)) # resonance 0.05 # legato 1.15 # room 0.85 # size 0.95 # orbit 1
+
+-- sparse organic tabla blips, wide & spacious
+d4 $ degradeBy 0.6 $ s "[~ east]*4" # n (irand 7) # gain 0.34 # pan rand # speed (range 0.9 1.1 rand) # room 0.5 # size 0.8 # orbit 1
+
+-- atmosphere: slow wind/texture swells
+d5 $ slow 7 $ s "wind" # n (irand 10) # gain 0.4 # room 0.85 # size 0.95 # orbit 1
+
+-- psychedelic delayed plucks, very sparse
+d6 $ degradeBy 0.55 $ note "c5 ef5 g5 bf4" # s "arpy" # gain 0.36 # delay 0.5 # delaytime (3/8) # delayfeedback 0.6 # room 0.4 # orbit 1
