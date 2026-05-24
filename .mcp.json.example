@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tidal-livecoder": {
+      "command": "node",
+      "args": ["C:\\path\\to\\astros-beatbox\\mcp\\dist\\server.js"]
+    }
+  }
+}

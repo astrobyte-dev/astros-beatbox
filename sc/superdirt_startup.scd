@@ -23,7 +23,7 @@ if(~dev == "SYSTEM", {
 }, {
     if(~dev.size > 0,
         { s.options.device = ~dev },
-        { s.options.device = "Windows WASAPI : Speakers (Logitech G560 Gaming Speaker)" }
+        { /* empty/absent -> OS default device; pick a "Windows WASAPI : <output>" in the dashboard for reliable headless audio */ }
     );
 });
 s.options.numInputBusChannels = 0;       // synthesis only

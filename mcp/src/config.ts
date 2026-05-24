@@ -1,17 +1,40 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync } from "node:fs";
 
-// Absolute paths for the rig (proven 2026-05-24).
-export const SCLANG = "C:\\Program Files\\SuperCollider-3.14.1\\sclang.exe";
-export const GHCI = "C:\\ghcup\\bin\\ghci.exe";
+// Project root, resolved from this file's location so the rig is portable:
+// compiled config.js lives at <root>/mcp/dist/config.js -> root is two dirs up.
+// Override with TIDAL_HOME if you keep the project somewhere unusual.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const LIVECODING = process.env.TIDAL_HOME ?? path.resolve(HERE, "..", "..");
 
-export const LIVECODING = "C:\\Users\\thr3e\\livecoding";
+// --- external toolchains: override via env vars, else sensible Windows defaults ---
+
+// SuperCollider: env TIDAL_SCLANG, else newest "SuperCollider-*" under Program Files.
+function findSclang(): string {
+  if (process.env.TIDAL_SCLANG) return process.env.TIDAL_SCLANG;
+  const pf = process.env.ProgramFiles ?? "C:\\Program Files";
+  try {
+    const dirs = readdirSync(pf).filter((d) => d.startsWith("SuperCollider")).sort().reverse();
+    for (const d of dirs) { const p = path.join(pf, d, "sclang.exe"); if (existsSync(p)) return p; }
+  } catch { /* fall through to default */ }
+  return "C:\\Program Files\\SuperCollider-3.14.1\\sclang.exe";
+}
+export const SCLANG = findSclang();
+
+// GHCup (provides ghci + cabal + the mingw64 tidal-link deps). Override base with TIDAL_GHCUP.
+const GHCUP = process.env.TIDAL_GHCUP ?? "C:\\ghcup";
+export const GHCI = process.env.TIDAL_GHCI ?? path.join(GHCUP, "bin", "ghci.exe");
+export const CABAL_DIR = process.env.CABAL_DIR ?? "C:\\cabal";
+// ghci needs ghcup bin (its own runtime) + mingw64 (tidal-link C++ deps) on PATH.
+export const GHCI_PATH = [path.join(GHCUP, "bin"), path.join(GHCUP, "msys64", "mingw64", "bin"), process.env.PATH ?? ""].join(path.delimiter);
+
+// Rig files — always inside the project, so portable automatically.
 export const SUPERDIRT_STARTUP = path.join(LIVECODING, "sc", "superdirt_startup.scd");
 export const BOOT_TIDAL = path.join(LIVECODING, "tidal", "BootTidal.hs");
-
-// ghci needs ghcup bin (its own runtime) + mingw64 (tidal-link C++ deps) on PATH,
-// plus CABAL_DIR so it resolves the installed tidal library env.
-export const GHCI_PATH = ["C:\\ghcup\\bin", "C:\\ghcup\\msys64\\mingw64\\bin", process.env.PATH ?? ""].join(path.delimiter);
-export const CABAL_DIR = "C:\\cabal";
+// Dashboard HTML served from a file (read fresh per request -> edit + browser refresh,
+// no MCP reload needed for UI tweaks).
+export const DASHBOARD_HTML = path.join(LIVECODING, "mcp", "dashboard.html");
 
 // readiness markers printed by each engine
 // Echo-proof marker (sclang echoes piped stdin, so the marker must NOT appear
@@ -19,8 +42,6 @@ export const CABAL_DIR = "C:\\cabal";
 export const SUPERDIRT_READY = "SDIRT_RDY_7731";
 export const SC_WELCOME = "Welcome to SuperCollider";
 // BootTidal's last action is to set the prompt to "tidal>" -> reliable "loaded" signal.
-// (Don't use "Connected to SuperDirt": that's a handshake reply that doesn't always print,
-// and isn't required for d1 to send OSC and make sound.)
 export const TIDAL_READY = "tidal>";
 
 // sclang interactive eval trigger: send  <code>\n <0x0C>\n
@@ -29,17 +50,19 @@ export const FORM_FEED = "\x0c";
 // Web dashboard (HTTP) + the UDP port the SuperDirt meter synth forwards levels to.
 export const DASHBOARD_PORT = Number(process.env.TIDAL_DASH_PORT ?? 3737);
 export const METER_UDP_PORT = Number(process.env.TIDAL_METER_PORT ?? 57199);
-// Dashboard HTML served from a file (read fresh per request -> edit + browser
-// refresh, no MCP reload needed for UI tweaks).
-export const DASHBOARD_HTML = "C:\\Users\\thr3e\\livecoding\\mcp\\dashboard.html";
 
-// Audio output device. The startup .scd reads the device name from this file at
-// boot (empty/absent = DEFAULT; the sentinel "SYSTEM" = let the OS pick). The
-// dashboard writes it + reboots to switch speakers <-> headphones.
+// Audio output device. The startup .scd reads the device name from this file at boot
+// (empty/absent or "SYSTEM" = let the OS pick). The dashboard writes it + reboots to
+// switch outputs. For reliable HEADLESS audio pick a "Windows WASAPI : <output>" device.
 export const AUDIO_DEVICE_FILE = path.join(LIVECODING, "audio_device.txt");
-export const DEFAULT_AUDIO_DEVICE = "Windows WASAPI : Speakers (Logitech G560 Gaming Speaker)";
+export const DEFAULT_AUDIO_DEVICE = process.env.TIDAL_AUDIO_DEVICE ?? "System default";
 
 // Saved jams, recordings, and the sample library (for the dashboard browser).
 export const SETS_DIR = path.join(LIVECODING, "sets");
 export const RECORDINGS_DIR = path.join(LIVECODING, "recordings");
-export const DIRT_SAMPLES_DIR = "C:\\Users\\thr3e\\AppData\\Local\\SuperCollider\\downloaded-quarks\\Dirt-Samples";
+// Dirt-Samples quark (per-user). Uses %LOCALAPPDATA% so it isn't tied to one username.
+export const DIRT_SAMPLES_DIR = process.env.TIDAL_DIRT_SAMPLES
+  ?? path.join(
+    process.env.LOCALAPPDATA ?? path.join(process.env.USERPROFILE ?? "C:\\Users\\Default", "AppData", "Local"),
+    "SuperCollider", "downloaded-quarks", "Dirt-Samples",
+  );
