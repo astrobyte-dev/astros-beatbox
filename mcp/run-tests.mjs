@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-const FLOOR = 19; // current test count on this branch (track 7 + dsp 12)
+const FLOOR = 31; // current test count: track 7 + dsp 12 + mixer 12 (raised with the mixer tests)
 
 const distDir = join(dirname(fileURLToPath(import.meta.url)), "dist");
 let files = [];

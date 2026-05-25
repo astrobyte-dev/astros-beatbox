@@ -150,6 +150,33 @@
   #consoleIn{flex:1;background:#010402;color:#bff7c9;border:1px solid var(--line);border-radius:4px;padding:7px 10px;
     font:13px/1.5 ui-monospace,Consolas,monospace;resize:none;height:34px;}
   #consoleIn:focus{outline:none;border-color:var(--green);box-shadow:0 0 8px rgba(0,255,94,.2);}
+  /* ---- mixer drawer (bottom, collapsible; CSS height transition = no re-render) ---- */
+  #mixwrap{max-height:0;overflow:hidden;transition:max-height .22s ease;background:rgba(4,10,6,.92);}
+  #mixwrap.open{max-height:440px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .mixbar{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);}
+  .mixbar .seqlabel{color:var(--green);font-size:11px;letter-spacing:.6px;text-transform:uppercase;}
+  #mixrows{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;}
+  .strip{flex:0 0 76px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:7px 5px;
+    border:1px solid var(--line);border-radius:4px;background:rgba(8,20,12,.6);}
+  .strip.empty{opacity:.3;}
+  .strip.muted{border-color:var(--amber);}
+  .strip.solo{border-color:var(--green);box-shadow:0 0 8px rgba(0,255,94,.25);}
+  .striphd{display:flex;flex-direction:column;align-items:center;line-height:1.2;}
+  .striphd .slot{font-weight:700;font-size:12px;}
+  .striphd .lbl{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.4px;height:11px;overflow:hidden;}
+  .mixscope{width:64px;height:40px;background:#020503;border:1px solid var(--line);border-radius:2px;display:block;}
+  .strip .sends{display:flex;gap:4px;width:100%;}
+  .strip .send{flex:1;display:flex;flex-direction:column;align-items:center;color:var(--muted);font-size:8px;gap:2px;}
+  .strip .send input[type=range]{width:30px;}
+  .strip .panrow{width:100%;display:flex;justify-content:center;}
+  .strip .panrow input[type=range]{width:58px;}
+  .fadarea{display:flex;align-items:flex-end;gap:5px;height:150px;padding:3px 0;}
+  .vmeter{width:5px;height:100%;background:#020503;border:1px solid var(--line);border-radius:2px;display:flex;align-items:flex-end;overflow:hidden;}
+  .vmeter i{display:block;width:100%;height:0%;background:linear-gradient(0deg,var(--gdim),var(--green) 70%,var(--amber));}
+  .fadarea input[type=range].fader{writing-mode:vertical-lr;direction:rtl;width:6px;height:100%;}
+  .msbtns{display:flex;gap:4px;}
+  .msbtns .ms{padding:3px 7px;font-size:10px;}
+  .msbtns .ms.on{border-color:var(--green);color:var(--green);}
 </style>
 </head>
 <body>
@@ -187,6 +214,7 @@
   <button data-act="cheats">&#128214; Cheat sheet</button>
   <button data-act="steps">&#127929; Step grid</button>
   <button data-act="curves">&#12316; Curves</button>
+  <button data-act="mixer" id="mixBtn">&#127898; Mixer</button>
   <span class="sep"></span>
   <div class="deckgroup"><span style="color:var(--muted);font-size:12px" title="audio output">&#128264;</span><select id="audioSelect" title="switch audio output (speakers / headphones)" style="max-width:185px"><option value="">audio out…</option></select></div>
 </div>
@@ -231,6 +259,12 @@
   </div>
 </div>
 <main><div class="grid" id="grid"></div></main>
+<div id="mixwrap">
+  <div class="mixbar"><span class="seqlabel">&#127898; MIXER</span>
+    <span class="seqhint">12 channels (orbits) · fader = volume (dB, unity at 75%) · FX1 = reverb send · FX2 = delay send · pan · M/S. Empty channels are ghosted.</span>
+  </div>
+  <div id="mixrows"></div>
+</div>
 <div id="console">
   <div id="consoleOut">type Tidal &amp; press Enter — e.g.  d1 $ s "bd sn hh cp"   ·   hush = stop   ·   d3 silence = clear layer 3</div>
   <div id="consoleRow"><span class="prompt">&gt;_</span>
@@ -243,5 +277,6 @@
 <script src="dashboard-cheats.js"></script>
 <script src="dashboard-curves.js"></script>
 <script src="dashboard-seq.js"></script>
+<script src="dashboard-mixer.js"></script>
 </body>
 </html>
