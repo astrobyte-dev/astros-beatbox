@@ -23,14 +23,18 @@ export function startDashboard(
       res.end("forbidden");
       return;
     }
-    if (req.url && req.url.startsWith("/dashboard.js")) {
+    // Serve dashboard.js and any dashboard-*.js module (dsp/scope/curves/seq/cheats), read
+    // fresh per request so UI edits don't need an MCP reload. The name is matched strictly
+    // (lowercase alnum + dash, ending .js, no slashes/dots), so it cannot read arbitrary files.
+    const jsMatch = req.url ? /^\/(dashboard(?:-[a-z0-9-]+)?\.js)(?:\?|$)/i.exec(req.url) : null;
+    if (jsMatch) {
       try {
-        const jsPath = htmlPath.replace(/dashboard\.html$/i, "dashboard.js");
+        const jsPath = htmlPath.replace(/dashboard\.html$/i, jsMatch[1]);
         res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store" });
         res.end(readFileSync(jsPath, "utf8"));
       } catch {
         res.writeHead(404, { "content-type": "application/javascript" });
-        res.end("// dashboard.js not found");
+        res.end("// module not found");
       }
       return;
     }
