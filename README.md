@@ -26,6 +26,7 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 
 - **Live layer cards** (`d1`–`d16`) — each shows its code, a plain-English explanation, per-layer knobs, and a **live waveform of that channel's own audio**
 - **Per-channel oscilloscope** — every card draws a real, phase-locked waveform tapped from its own voice; plus a master L/R meter and a **wavelength-coloured spectrum** (low freq red → high freq blue)
+- **Mixer view** with all 12 channels as strips: a volume fader, pan, reverb + delay sends, mute/solo, a meter, and a live mini-scope each
 - **Step sequencer** with **per-step velocity** (scroll a pad), **drag-to-paint** + right-click erase, swing, and a playhead **locked to the audio** so each lit step flashes exactly when you hear it
 - **Pattern slots (A/B/C/D)** you can chain into a song that advances each bar
 - **Drag-and-drop sample browser** — drag a sound onto a channel to swap it; drag channels to reorder
