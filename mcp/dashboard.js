@@ -190,9 +190,9 @@
 
   document.addEventListener("input",function(e){ var el=e.target;
     if(el.id==="consoleIn"){ el.style.height="auto"; el.style.height=Math.min(150,el.scrollHeight)+"px"; return; }
-    if(AbxCheats.handleInput(e)) return;   // #sampleFilter
+    if(window.AbxCheats && AbxCheats.handleInput(e)) return;   // #sampleFilter
     if(el.type==="range") lastInput=Date.now();   // suppress card re-render while dragging any slider
-    if(AbxSeq.handleInput(e)) return;      // seqname / seqvol / seqSwing
+    if(window.AbxSeq && AbxSeq.handleInput(e)) return;      // seqname / seqvol / seqSwing
     if(el.type!=="range")return;
     if(el.dataset.tempo!==undefined){ document.getElementById("bpm").textContent=el.value; pendingTempo=+el.value; return; }
     if(el.dataset.slot){ var vb=document.getElementById("v-"+el.dataset.slot+"-"+el.dataset.param); if(vb)vb.textContent=el.value;
@@ -204,12 +204,12 @@
     if(window.AbxSeq) AbxSeq.flushPending(); },80);
 
   document.addEventListener("click",function(e){
-    if(AbxCheats.handleClick(e)) return;   // chip / cheat line / cheats + samples buttons
+    if(window.AbxCheats && AbxCheats.handleClick(e)) return;   // chip / cheat line / cheats + samples buttons
     var b=e.target.closest("button");
     // step pads are handled by the pointer/wheel/contextmenu paint listeners below
     if(!b)return;
-    if(AbxSeq.handleClick(b)) return;       // steps / seqadd / seqclear / row mute+clear / pattern / song
-    if(AbxCurves.handleClick(b)) return;    // curves panel / curve toggle+preset
+    if(window.AbxSeq && AbxSeq.handleClick(b)) return;       // steps / seqadd / seqclear / row mute+clear / pattern / song
+    if(window.AbxCurves && AbxCurves.handleClick(b)) return;    // curves panel / curve toggle+preset
     if(b.dataset.act==="run"){ runCode(); return; }
     if(b.dataset.act==="boot"){ var o=document.getElementById("consoleOut"); o.textContent="booting the sound engine… (~30-40s) — watch the status light top-left"; o.className=""; send({cmd:"boot"}).then(function(){poll();}); return; }
     if(b.dataset.act==="reset"){ if(confirm("Reboot the engine? Wipes everything, fresh start (~30s).")) cmd("reset"); return; }
@@ -228,7 +228,7 @@
 
   // audio output device switch (restarts the engine; beat resumes)
   document.addEventListener("change",function(e){
-    if(AbxCurves.handleChange(e)) return;
+    if(window.AbxCurves && AbxCurves.handleChange(e)) return;
     if(e.target.id!=="audioSelect")return;
     var d=e.target.value; if(!d){ return; }
     var label=d==="SYSTEM"?"System default":d.replace(/^Windows WASAPI : /,"");
@@ -255,7 +255,7 @@
     if(e.key===" "){ e.preventDefault(); toggleAll(); return; }
     if(e.key>="1"&&e.key<="9"){ var k="d"+e.key; if(cur.slots[k]){ var m=(cur.muted||[]).indexOf(k)>=0; cmd(m?"unmute":"mute",k); } return; }
     if(e.key==="?"){ var l=document.getElementById("legend"); l.style.display=(l.style.display==="block")?"none":"block"; return; }
-    if(e.key==="c"||e.key==="C"){ AbxCheats.openCheats(); return; }
+    if(e.key==="c"||e.key==="C"){ if(window.AbxCheats) AbxCheats.openCheats(); return; }
   });
 
   // ---- console ----
@@ -327,8 +327,8 @@
   // Deferred to DOMContentLoaded: the dashboard scripts load in sequence and the openX() calls
   // here now reach across files (AbxCheats etc.), which only exist after their file has parsed.
   window.addEventListener("DOMContentLoaded",function(){ var h=(location.hash||"").slice(1).toLowerCase();
-    if(h==="cheats") AbxCheats.openCheats();
-    else if(h==="samples") AbxCheats.openSamples();
-    else if(h==="curves") AbxCurves.openCurves();
-    else if(h==="steps"){ AbxSeq.seedDemo(); AbxSeq.openSteps(); }
+    if(h==="cheats"){ if(window.AbxCheats) AbxCheats.openCheats(); }
+    else if(h==="samples"){ if(window.AbxCheats) AbxCheats.openSamples(); }
+    else if(h==="curves"){ if(window.AbxCurves) AbxCurves.openCurves(); }
+    else if(h==="steps"){ if(window.AbxSeq){ AbxSeq.seedDemo(); AbxSeq.openSteps(); } }
   });
