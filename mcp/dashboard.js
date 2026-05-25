@@ -194,6 +194,7 @@
     if(el.type==="range") lastInput=Date.now();   // suppress card re-render while dragging any slider
     if(window.AbxSeq && AbxSeq.handleInput(e)) return;      // seqname / seqvol / seqSwing
     if(el.type!=="range")return;
+    if(window.AbxMixer && AbxMixer.handleInput(e)) return;    // mixer fader / pan / FX1 / FX2 (range + data-slot, no data-param)
     if(el.dataset.tempo!==undefined){ document.getElementById("bpm").textContent=el.value; pendingTempo=+el.value; return; }
     if(el.dataset.slot){ var vb=document.getElementById("v-"+el.dataset.slot+"-"+el.dataset.param); if(vb)vb.textContent=el.value;
       pending[el.dataset.slot+"|"+el.dataset.param]={slot:el.dataset.slot,param:el.dataset.param,value:+el.value}; }
@@ -210,6 +211,7 @@
     if(!b)return;
     if(window.AbxSeq && AbxSeq.handleClick(b)) return;       // steps / seqadd / seqclear / row mute+clear / pattern / song
     if(window.AbxCurves && AbxCurves.handleClick(b)) return;    // curves panel / curve toggle+preset
+    if(window.AbxMixer && AbxMixer.handleClick(b)) return;     // mixer drawer toggle (strip M/S use data-cmd, shared with cards)
     if(b.dataset.act==="run"){ runCode(); return; }
     if(b.dataset.act==="boot"){ var o=document.getElementById("consoleOut"); o.textContent="booting the sound engine… (~30-40s) — watch the status light top-left"; o.className=""; send({cmd:"boot"}).then(function(){poll();}); return; }
     if(b.dataset.act==="reset"){ if(confirm("Reboot the engine? Wipes everything, fresh start (~30s).")) cmd("reset"); return; }
@@ -318,6 +320,7 @@
     }
     grid.innerHTML=h;
     if(window.AbxCurves) AbxCurves.maybeRerender(keys);
+    if(window.AbxMixer) AbxMixer.maybeRerender();
   }
   function poll(){ fetch("/state").then(function(r){return r.json();}).then(render).catch(function(){
     document.getElementById("engstate").textContent="disconnected"; document.getElementById("engdot").className="dot error"; }); }
