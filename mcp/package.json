@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test dist/track.test.js",
     "selftest": "node dist/selftest.js",
     "start": "node dist/server.js"
   },

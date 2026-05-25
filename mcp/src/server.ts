@@ -5,8 +5,26 @@ import { Engine } from "./engine.js";
 import { Meter } from "./meter.js";
 import { startDashboard } from "./dashboard.js";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import path from "node:path";
 import { DASHBOARD_PORT, METER_UDP_PORT, DASHBOARD_HTML, SETS_DIR, RECORDINGS_DIR, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE } from "./config.js";
+import { track, applyParam, scStr } from "./track.js";
+
+// Single-instance guard: if a stale server still holds the dashboard port (e.g. a
+// previous reconnect that didn't exit), kill it so this newest instance wins —
+// avoids two engines fighting over the audio device + port.
+function takePort(port: number): void {
+  try {
+    const out = execSync("netstat -ano -p TCP", { encoding: "utf8", windowsHide: true });
+    for (const line of out.split(/\r?\n/)) {
+      const cols = line.trim().split(/\s+/);
+      if (cols.length >= 5 && /LISTENING/i.test(cols[3]) && cols[1].endsWith(`:${port}`)) {
+        const pid = parseInt(cols[4], 10);
+        if (pid && pid !== process.pid) { try { execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" }); } catch { /* already gone */ } }
+      }
+    }
+  } catch { /* netstat unavailable; startDashboard's EADDRINUSE handler still applies */ }
+}
 
 const engine = new Engine();
 const meter = new Meter();
@@ -21,22 +39,6 @@ const rig: {
   recording: boolean;
   recPath: string;
 } = { slots: {}, tempoBpm: 0, muted: new Set(), solo: null, paused: false, recording: false, recPath: "" };
-
-// Approximate parse of evaluated Tidal to track what each d-slot is doing.
-function track(code: string): void {
-  let c = code.trim();
-  const wrap = c.match(/^do\s*\{([\s\S]*)\}\s*$/);
-  if (wrap) c = wrap[1];
-  for (const raw of c.split(";")) {
-    const st = raw.trim();
-    if (!st) continue;
-    let m;
-    if ((m = st.match(/setcps\s*\(?\s*([0-9.]+)\s*\/\s*60\s*\/\s*4/))) { rig.tempoBpm = Math.round(parseFloat(m[1])); continue; }
-    if ((m = st.match(/setcps\s+([0-9.]+)/))) { rig.tempoBpm = Math.round(parseFloat(m[1]) * 60 * 4); continue; }
-    if ((m = st.match(/^(d\d{1,2})\s+silence\b/))) { delete rig.slots[m[1]]; rig.muted.delete(m[1]); if (rig.solo === m[1]) rig.solo = null; continue; }
-    if ((m = st.match(/^(d\d{1,2})\s*\$?\s*([\s\S]+)/))) { rig.slots[m[1]] = m[2].trim(); rig.muted.delete(m[1]); continue; }
-  }
-}
 
 const server = new McpServer({ name: "tidal-livecoder", version: "0.2.0" });
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
@@ -64,7 +66,7 @@ server.tool(
     const err = await ready();
     if (err) return text(err);
     engine.tidal.eval(code);
-    track(code);
+    track(rig, code);
     await new Promise((r) => setTimeout(r, 350));
     const out = engine.tidal.tail(1200);
     const bad = /error:|not in scope|parse error|lexical error/i.test(out);
@@ -186,7 +188,7 @@ async function handleCmd(body: CmdBody): Promise<string> {
         return "hush - silenced.";
       }
       engine.tidal.eval(code);
-      track(code);
+      track(rig, code);
       await new Promise((r) => setTimeout(r, 320));
       const out = engine.tidal.tail(900);
       const bad = /error:|not in scope|parse error|lexical error/i.test(out);
@@ -198,11 +200,7 @@ async function handleCmd(body: CmdBody): Promise<string> {
       const code = rig.slots[slot];
       if (!code) return "no slot " + slot;
       const num = Number(body.value);
-      const re = new RegExp(`#\\s*${param}\\s+[^#]*`);
-      const updated = re.test(code)
-        ? code.replace(re, `# ${param} ${num} `)
-        : `${code.trim()} # ${param} ${num}`;
-      rig.slots[slot] = updated.replace(/\s+/g, " ").trim();
+      rig.slots[slot] = applyParam(code, param, num);
       engine.tidal.eval(`d${n} $ ${rig.slots[slot]}`);
       return `set ${slot} ${param}=${num}`;
     }
@@ -224,7 +222,7 @@ async function handleCmd(body: CmdBody): Promise<string> {
         const t = line.trim();
         if (!t || t.startsWith("--")) continue;
         engine.tidal.eval(t);
-        track(t);
+        track(rig, t);
       }
       return "loaded set: " + name;
     }
@@ -234,7 +232,7 @@ async function handleCmd(body: CmdBody): Promise<string> {
         rig.recPath = path.join(RECORDINGS_DIR, fname).replace(/\\/g, "/");
         try { mkdirSync(RECORDINGS_DIR, { recursive: true }); } catch { /* ignore */ }
         engine.sclang.eval(
-          `( Routine({ SynthDef(\\diskrec, { |buf| DiskOut.ar(buf, In.ar(0,2)) }).add; ~recBuf = Buffer.alloc(s, 65536, 2); s.sync; ~recBuf.write("${rig.recPath}", "wav", "int16", 0, 0, true); s.sync; ~recSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf, ~recBuf.bufnum]); }).play(SystemClock); )`,
+          `( Routine({ SynthDef(\\diskrec, { |buf| DiskOut.ar(buf, In.ar(0,2)) }).add; ~recBuf = Buffer.alloc(s, 65536, 2); s.sync; ~recBuf.write("${scStr(rig.recPath)}", "wav", "int16", 0, 0, true); s.sync; ~recSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf, ~recBuf.bufnum]); }).play(SystemClock); )`,
         );
         rig.recording = true;
         return "recording → " + fname;
@@ -255,6 +253,7 @@ async function handleCmd(body: CmdBody): Promise<string> {
 }
 
 // --- dashboard + meter (independent of the MCP stdio transport) ---
+takePort(DASHBOARD_PORT); // newest instance wins: clear any stale server on the port
 meter.start(METER_UDP_PORT);
 startDashboard(
   DASHBOARD_PORT,

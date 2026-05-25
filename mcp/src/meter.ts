@@ -27,6 +27,7 @@ export class Meter {
     });
     this.sock.on("error", () => { /* ignore */ });
     this.sock.bind(port, "127.0.0.1");
+    this.sock.unref(); // don't keep the event loop alive on shutdown
   }
 
   stop(): void {

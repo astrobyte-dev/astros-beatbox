@@ -14,6 +14,25 @@ export function startDashboard(
   onCmd: CmdHandler,
 ): http.Server {
   const server = http.createServer((req, res) => {
+    // Loopback-only guard: block DNS-rebinding / cross-site access to this local rig
+    // (which can run arbitrary code via /cmd). Requests must target 127.0.0.1/localhost.
+    const hostName = (req.headers.host || "").split(":")[0];
+    if (hostName && hostName !== "127.0.0.1" && hostName !== "localhost") {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("forbidden");
+      return;
+    }
+    if (req.url && req.url.startsWith("/dashboard.js")) {
+      try {
+        const jsPath = htmlPath.replace(/dashboard\.html$/i, "dashboard.js");
+        res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store" });
+        res.end(readFileSync(jsPath, "utf8"));
+      } catch {
+        res.writeHead(404, { "content-type": "application/javascript" });
+        res.end("// dashboard.js not found");
+      }
+      return;
+    }
     if (req.url && req.url.startsWith("/state")) {
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(JSON.stringify(getState()));
@@ -34,6 +53,14 @@ export function startDashboard(
       return;
     }
     if (req.method === "POST" && req.url && req.url.startsWith("/cmd")) {
+      // CSRF guard: /cmd runs arbitrary Tidal/SC code, so reject any cross-origin POST.
+      // (Same-origin dashboard requests send our own Origin or none; attacker tabs send theirs.)
+      const origin = req.headers.origin;
+      if (origin) {
+        let ok = false;
+        try { const h = new URL(origin).hostname; ok = h === "127.0.0.1" || h === "localhost"; } catch { ok = false; }
+        if (!ok) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "forbidden origin" })); return; }
+      }
       let body = "";
       req.on("data", (c) => { body += c; if (body.length > 4096) req.destroy(); });
       req.on("end", async () => {

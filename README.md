@@ -106,8 +106,14 @@ do { setcps (140/60/4)
    ; d4 $ note "<c2 af1 g1 bf1>" # s "supersaw" # cutoff 600 # legato 1 }
 ```
 
-> ⚠️ Run the server in **one** client at a time — two instances fight over the audio engine
-> and port 3737.
+> ⚠️ Run the server in **one** client at a time. (A newer instance now auto-clears a stale
+> one holding port 3737, so reconnects don't pile up.)
+
+> 🔒 **Security:** live coding *is* arbitrary code execution — `eval_tidal`/`eval_sc` and the
+> dashboard's `/cmd` run whatever you send, and on Windows SuperCollider can touch the
+> filesystem/shell. The dashboard binds to `127.0.0.1` and rejects non-loopback (`Host`)
+> and cross-origin (`Origin`) requests to block DNS-rebinding/CSRF from a browser tab —
+> but still **don't expose port 3737 to an untrusted network**.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow and project layout.
 
