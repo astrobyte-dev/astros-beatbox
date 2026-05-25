@@ -12,11 +12,11 @@ A free, **code-first live-coding music rig** for Windows — describe a beat in 
 
 ![Astro's Beatbox in action](docs/demo.gif)
 
-| Live dashboard | Step sequencer (channel rack) |
+| Live dashboard | Step sequencer |
 |---|---|
 | ![dashboard](docs/01-dashboard.png) | ![step sequencer](docs/03-stepgrid.png) |
 
-Each instrument gets its own wavelength colour. Built-in cheat sheet — clickable Tidal snippets, genre starters, build-ups & drops:
+Each instrument gets its own wavelength colour and a **live waveform of its own audio**. Built-in cheat sheet — clickable Tidal snippets, genre starters, build-ups & drops:
 
 ![cheat sheet](docs/02-cheatsheet.png)
 
@@ -24,14 +24,15 @@ Each instrument gets its own wavelength colour. Built-in cheat sheet — clickab
 
 ## Features
 
-- Live `d1`–`d16` layer cards with code, plain-English explanations, and per-layer knobs
-- Real-time L/R meter + **wavelength-coloured spectrum** (low freq red → high freq blue)
-- **Step sequencer** (channel rack) with per-instrument wavelength colours + swing
+- **Live layer cards** (`d1`–`d16`) — each shows its code, a plain-English explanation, per-layer knobs, and a **live waveform of that channel's own audio**
+- **Per-channel oscilloscope** — every card draws a real, phase-locked waveform tapped from its own voice; plus a master L/R meter and a **wavelength-coloured spectrum** (low freq red → high freq blue)
+- **Step sequencer** with **per-step velocity** (scroll a pad), **drag-to-paint** + right-click erase, swing, and a playhead **locked to the audio** so each lit step flashes exactly when you hear it
+- **Pattern slots (A/B/C/D)** you can chain into a song that advances each bar
+- **Drag-and-drop sample browser** — drag a sound onto a channel to swap it; drag channels to reorder
 - **Per-channel modulation curves** — draw an automation/LFO curve per layer
-- **Sample browser**, **save/load sets**, **record-to-WAV**
-- **Audio-device switcher** (speakers ↔ headphones, live)
+- **Save / load sets**, **record-to-WAV**, live **audio-device switcher** (speakers ↔ headphones)
 - **Set Loop** — freeze the current beat into one `LOOP_` channel and build on top
-- Loop-progress bar + track timer, keyboard shortcuts, built-in cheat sheet, "Surprise me"
+- Loop-progress bar, track timer, keyboard shortcuts, built-in cheat sheet, "Surprise me"
 
 ---
 

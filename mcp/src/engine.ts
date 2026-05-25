@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { Sclang } from "./sclang.js";
 import { Tidal } from "./tidal.js";
-import { METER_UDP_PORT, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE } from "./config.js";
+import { METER_UDP_PORT, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE, SCOPE_ENABLED, SCOPE_RMS_HZ, SCOPE_WAVE_N, SCOPE_WAVE_MS } from "./config.js";
 
 // Clear orphaned rig processes (from a previous instance that was hard-killed on
 // reload, leaving an scsynth/sclang holding port 57120). Blanket kill by image
@@ -62,6 +62,7 @@ export class Engine {
         this.tidal.start();                   // ghci connects to SuperDirt
         await this.tidal.waitConnected();
         await this.installMaster();           // limiter + meter (best-effort)
+        await this.installScope();            // per-channel live scope (best-effort)
         await this.queryDevices();            // list output devices for the dashboard
         this.state = "ready";
       })().catch((e) => {
@@ -87,12 +88,54 @@ export class Engine {
       `Synth.tail(RootNode(s), \\masterSpec); ` +
       `OSCdef(\\meterfwd, {|msg| NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("MTR " ++ msg[3].round(0.001) ++ " " ++ msg[4].round(0.001)) }, '/meter'); ` +
       `OSCdef(\\specfwd, {|msg| NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("SPEC " ++ msg[3..].collect({|x| x.round(0.001)}).join(" ")) }, '/spec'); ` +
-      // tap every Tidal event: forward its orbit so the dashboard can flash that slot live
-      `OSCdef(\\hittap, {|msg| var orb = 0; msg.do { |it, ix| if(it.asString == "orbit") { orb = msg[ix+1] } }; NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("HIT " ++ orb) }, '/dirt/play'); ` +
+      // tap every Tidal event: forward its orbit (HIT, for slot flashing) AND the audio
+      // clock (CLK <cycle> <cps>) so the dashboard can phase-lock its playhead to the real
+      // beat instead of a free-running browser timer. cycle is fractional (sub-cycle phase).
+      // `time` is the scheduled AUDIO onset; the OSCdef fires ~latency earlier, so
+      // lead = time - now is how long until this event is actually heard (~0.25s).
+      // Forwarding it lets the browser delay the playhead to match the sound exactly.
+      `OSCdef(\\hittap, {|msg, time| var orb = 0, cyc = -1, cpv = -1, lead = (time - SystemClock.seconds).max(0); msg.do { |it, ix| if(it.asString == "orbit") { orb = msg[ix+1] }; if(it.asString == "cycle") { cyc = msg[ix+1] }; if(it.asString == "cps") { cpv = msg[ix+1] } }; NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("HIT " ++ orb); if(cyc >= 0) { NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("CLK " ++ cyc.round(0.0001) ++ " " ++ cpv.round(0.0001) ++ " " ++ lead.round(0.0001)) } }, '/dirt/play'); ` +
       `("MTR" ++ "INIT").postln; ` +
       `}).play(SystemClock); )`;
     this.sclang.eval(code);
     await this.sclang.waitFor("MTRINIT", 8000).catch(() => { /* meter is best-effort */ });
+  }
+
+  // Per-channel live "synth board" scope. Two signals per orbit, forwarded to the
+  // dashboard over UDP (same path as the master meter), additive + best-effort:
+  //   * LEVEL: SuperDirt's built-in per-orbit RMS (startSendRMS) -> "RMS <orbit> <rms> <peak>"
+  //     SendPeakRMS '/rms' reply = [path, nodeID, orbitIndex, peakL, rmsL, peakR, rmsR].
+  //   * WAVEFORM: a tiny \abxScope synth per orbit decimates that orbit's (dry+fx)
+  //     signal to 32 samples via Phasor/BufWr/BufRd and SendReply's '/abx/wave'
+  //     -> "WAVE <orbit> s0..s31". It only READS buses (no Out.ar), so it can't alter
+  //     audio. CRITICAL placement: it must sit *after* the orbit's dirt_rms node and
+  //     before the monitor (addAction 3 = addAfter rms node) — read at the orbit group
+  //     tail the per-orbit bus is already cleared (verified live). startSendRMS rebuilds
+  //     the orbit node trees, so wait for that to settle before placing the synths.
+  private async installScope(): Promise<void> {
+    if (!SCOPE_ENABLED) return;
+    const hz = SCOPE_RMS_HZ, P = METER_UDP_PORT, N = SCOPE_WAVE_N;
+    const waveRate = Math.round((N * 1000) / SCOPE_WAVE_MS); // decimation rate (samples/sec)
+    const code =
+      `( Routine({ ` +
+      `SynthDef(\\abxScope, { |dryBus, fxBus, orbit = 0| ` +
+        `var sig = (In.ar(dryBus, 2) + In.ar(fxBus, 2)).sum * 0.5; ` +
+        `var buf = LocalBuf(${N}).clear; ` +
+        `var wph = Phasor.ar(0, ${waveRate} / SampleRate.ir, 0, ${N}); ` +
+        `var rd; ` +
+        `BufWr.ar(sig, buf, wph, 1); ` +
+        `rd = BufRd.kr(1, buf, (0..${N - 1}), 1, 1); ` +
+        `SendReply.kr(Impulse.kr(${hz}), '/abx/wave', rd, orbit); ` +
+      `}).add; ` +
+      `~dirt.startSendRMS(${hz}, 3); ` +
+      `s.sync; 1.0.wait; ` +
+      `OSCdef(\\rmsfwd, {|msg| var orbit = msg[2], rms = ((msg[4] + msg[6]) * 0.5), peak = max(msg[3], msg[5]); NetAddr("127.0.0.1", ${P}).sendRaw("RMS " ++ orbit ++ " " ++ rms.round(0.001) ++ " " ++ peak.round(0.001)) }, '/rms'); ` +
+      `OSCdef(\\wavefwd, {|msg| NetAddr("127.0.0.1", ${P}).sendRaw("WAVE " ++ msg[2] ++ " " ++ msg[3..].collect({|x| x.round(0.001)}).join(" ")) }, '/abx/wave'); ` +
+      `~dirt.orbits.do { |o, i| var rs = o.getGlobalEffect('dirt_rms').synth; if(rs.notNil) { s.sendMsg("/s_new", "abxScope", -1, 3, rs.nodeID, "dryBus", o.dryBus.index, "fxBus", o.globalEffectBus.index, "orbit", i) } }; ` +
+      `("SCOPE" ++ "INIT").postln; ` +
+      `}).play(SystemClock); )`;
+    this.sclang.eval(code);
+    await this.sclang.waitFor("SCOPEINIT", 9000).catch(() => { /* scope is best-effort */ });
   }
 
   // Enumerate audio output devices so the dashboard can offer a picker. Markers are

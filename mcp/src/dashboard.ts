@@ -11,6 +11,7 @@ export function startDashboard(
   port: number,
   htmlPath: string,
   getState: () => unknown,
+  getClock: () => unknown,
   onCmd: CmdHandler,
 ): http.Server {
   const server = http.createServer((req, res) => {
@@ -50,6 +51,18 @@ export function startDashboard(
       try { samples = readdirSync(DIRT_SAMPLES_DIR, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name); } catch { /* none */ }
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(JSON.stringify(samples.sort()));
+      return;
+    }
+    if (req.url && req.url.startsWith("/clock")) {
+      // Real-time audio-clock stream (SSE) for phase-locking the dashboard playhead.
+      // One-way server->browser; rides the existing http server (no new dependency/port).
+      // Pushed at 30Hz; payload carries `age` (ms since the cycle was received) so the
+      // browser can anchor precisely without inheriting push-quantization lag.
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      const send = () => { try { res.write(`data: ${JSON.stringify(getClock())}\n\n`); } catch { /* connection closed */ } };
+      send();
+      const tick = setInterval(send, 1000 / 30);
+      req.on("close", () => clearInterval(tick));
       return;
     }
     if (req.method === "POST" && req.url && req.url.startsWith("/cmd")) {

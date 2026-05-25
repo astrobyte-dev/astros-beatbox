@@ -76,9 +76,33 @@
   .seqpads{display:flex;gap:3px;flex:1;min-width:0;}
   .pad{flex:1;height:28px;min-width:13px;background:#0b1a11;border:1px solid var(--line);border-radius:3px;cursor:pointer;transition:background .06s,box-shadow .06s;}
   .seqpads .pad:not(:first-child):nth-child(4n+1){margin-left:8px;}
+  /* step-number ruler (aligned over the pad columns) */
+  .seqruler{display:flex;align-items:center;gap:7px;margin:2px 0 7px;color:var(--muted);font-size:9px;}
+  .seqruler .rlead{width:236px;flex:none;} .seqruler .rtrail{width:66px;flex:none;}
+  .seqruler .rpads{display:flex;gap:3px;flex:1;min-width:0;pointer-events:none;}
+  .rstep{flex:1;min-width:13px;text-align:center;letter-spacing:.5px;}
+  .rstep:not(:first-child):nth-child(4n+1){margin-left:8px;}
+  .rstep.beat{color:var(--amber);font-weight:700;}
+  .seqgrip{flex:none;cursor:grab;color:var(--muted);font-size:12px;user-select:none;}
+  .seqgrip:active{cursor:grabbing;}
+  .seqtag{width:46px;flex:none;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .seqpads .pad.beat{border-left-color:rgba(217,197,51,.5);}
+  .seqrow.dragover{outline:1px dashed var(--green);outline-offset:1px;}
+  /* pattern slots + song chain */
+  .patbar{margin-bottom:9px;}
+  .patslots{display:flex;gap:4px;}
+  .patslot{padding:3px 12px;font-weight:700;font-size:11px;color:var(--muted);}
+  .patslot.filled{color:var(--txt);border-color:var(--gdim);}
+  .patslot.on{background:var(--green);color:#04070a;border-color:var(--green);box-shadow:0 0 8px rgba(0,255,94,.4);}
+  #songChain{background:#020503;color:var(--txt);border:1px solid var(--line);border-radius:3px;padding:4px 8px;font:inherit;font-size:11px;width:110px;}
+  #songChain:focus{outline:none;border-color:var(--green);}
+  #songBtn.on{background:var(--green);color:#04070a;border-color:var(--green);}
   .pad:hover{border-color:var(--gdim);}
   .pad.on{background:var(--rc,var(--green));box-shadow:0 0 7px var(--rc,rgba(0,255,94,.45));}
-  .pad.now{outline:2px solid var(--amber);outline-offset:-1px;}
+  /* playhead: subtle on empty cells (just a position guide)… */
+  .pad.now{outline:1px solid rgba(217,197,51,.4);outline-offset:-1px;}
+  /* …but a lit step BLAZES the instant the playhead crosses it = you hear it now */
+  .pad.on.now{outline:none;filter:brightness(1.85) saturate(1.15);box-shadow:0 0 16px var(--rc,var(--green)),0 0 5px #fff;}
   .seqvol{width:66px;}
   #curvewrap{display:none;padding:10px 16px 14px;border-bottom:1px solid var(--line);background:rgba(4,10,6,.96);overflow:auto;max-height:470px;}
   .curverow{margin-bottom:12px;}
@@ -109,6 +133,8 @@
   .cbtns button.on{background:var(--green);color:#04070a;border-color:var(--green);}
   .cbtns button.info{font-size:12px;line-height:1;}
   code{display:block;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,Consolas,monospace;color:#9fe7ad;}
+  /* per-channel live scope (synth board): a moving waveform per card, in its channel colour */
+  .scope{display:block;width:100%;height:56px;margin:9px 0 3px;background:#020503;border:1px solid var(--line);border-radius:4px;}
   .knobs{margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px 14px;}
   .knob{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted);}
   .knob span{width:26px;text-transform:uppercase;} .knob input{flex:1;min-width:50px;}
@@ -180,7 +206,14 @@
     <button data-act="seqadd">+ row</button>
     <button data-act="seqclear">clear all</button>
     <span class="seqswing">swing <input type="range" id="seqSwing" min="0" max="50" value="0"><b id="seqSwingV">0</b></span>
-    <span class="seqhint">click pads to build a beat — plays live. each row = a layer (d1, d2…). set tempo with the BPM slider.</span>
+    <span class="seqhint">drag to paint &middot; right-click erase &middot; scroll a pad for velocity &middot; drag a sample onto a row &middot; &#9776; drag to reorder</span>
+  </div>
+  <div class="seqbar patbar"><span class="seqlabel">&#9638; PATTERN</span>
+    <span class="patslots" id="patslots"></span>
+    <span class="sep"></span>
+    <button data-act="songtoggle" id="songBtn" title="chain patterns into a song — advances one pattern per bar">&#9654; Song</button>
+    <input type="text" id="songChain" placeholder="A B A C" title="space-separated pattern chain, e.g. A A B A" autocomplete="off" spellcheck="false">
+    <span class="seqhint" id="patnow"></span>
   </div>
   <div id="seqrows"></div>
 </div>

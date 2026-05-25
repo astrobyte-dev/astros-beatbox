@@ -7,7 +7,7 @@ import { startDashboard } from "./dashboard.js";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
-import { DASHBOARD_PORT, METER_UDP_PORT, DASHBOARD_HTML, SETS_DIR, RECORDINGS_DIR, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE } from "./config.js";
+import { DASHBOARD_PORT, METER_UDP_PORT, DASHBOARD_HTML, SETS_DIR, RECORDINGS_DIR, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE, SCOPE_ENABLED } from "./config.js";
 import { track, applyParam, scStr } from "./track.js";
 
 // Single-instance guard: if a stale server still holds the dashboard port (e.g. a
@@ -261,11 +261,23 @@ startDashboard(
   () => {
     // map each active slot dN to its default orbit (N-1) and surface last-hit time
     const hits: Record<string, number> = {};
+    // per-channel live scope: latest rms/peak (+ waveform) per active slot, recent only
+    const scopes: Record<string, { rms: number; peak: number; wave?: number[] }> = {};
+    const now = Date.now();
     for (const k of Object.keys(rig.slots)) {
-      const t = meter.hits[parseInt(k.slice(1), 10) - 1];
+      const orbit = parseInt(k.slice(1), 10) - 1;
+      const t = meter.hits[orbit];
       if (t) hits[k] = t;
+      const sc = meter.scopes[orbit];
+      if (sc && now - sc.t < 500) {
+        const entry: { rms: number; peak: number; wave?: number[] } = { rms: sc.rms, peak: sc.peak };
+        if (sc.wave && sc.waveT && now - sc.waveT < 500) entry.wave = sc.wave;
+        scopes[k] = entry;
+      }
     }
     return {
+      scope: SCOPE_ENABLED,
+      scopes,
       status: engine.state,
       tempoBpm: rig.tempoBpm,
       meterL: meter.l,
@@ -282,6 +294,9 @@ startDashboard(
       device: engine.currentDevice,
     };
   },
+  // audio clock for the dashboard playhead; `age` lets the browser anchor precisely,
+  // `lead` is the Tidal latency so the playhead lands on the sound, not ahead of it
+  () => ({ cycle: meter.cycle, cps: meter.cps, lead: meter.lead, age: Date.now() - meter.cycleAt }),
   handleCmd,
 );
 

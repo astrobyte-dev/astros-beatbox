@@ -51,6 +51,21 @@ export const FORM_FEED = "\x0c";
 export const DASHBOARD_PORT = Number(process.env.TIDAL_DASH_PORT ?? 3737);
 export const METER_UDP_PORT = Number(process.env.TIDAL_METER_PORT ?? 57199);
 
+// Per-channel live "synth board" scope: each dN card gets a live-moving waveform.
+// Built on SuperDirt's own per-orbit RMS (startSendRMS) — additive, degrades safely.
+// Default ON; set TIDAL_SCOPE=0 to disable (no RMS enabled, no scopes in /state).
+export const SCOPE_ENABLED = (process.env.TIDAL_SCOPE ?? "1") !== "0";
+// SuperDirt RMS reply rate (Hz). 20 reads as "live" without flooding loopback UDP
+// (12 orbits x 20 Hz). SendPeakRMS rate isn't modulatable, so it's set at boot.
+export const SCOPE_RMS_HZ = Number(process.env.TIDAL_SCOPE_HZ ?? 20);
+// Waveform (Strategy B) detail: N raw samples captured across a WAVE_MS window. This is
+// RAW MATERIAL for the client-side triggered oscilloscope — the window must be wide
+// enough to contain >=2 cycles of the lowest content to lock onto (sub-bass ~50Hz needs
+// ~40ms+), so the client can phase-trigger + auto-zoom to ~2 clean cycles. More N =
+// finer per-cycle resolution. (Decimation rate = N/WAVE_MS kHz; keep < SR/2.)
+export const SCOPE_WAVE_N = Number(process.env.TIDAL_SCOPE_N ?? 96);
+export const SCOPE_WAVE_MS = Number(process.env.TIDAL_SCOPE_MS ?? 48);
+
 // Audio output device. The startup .scd reads the device name from this file at boot
 // (empty/absent or "SYSTEM" = let the OS pick). The dashboard writes it + reboots to
 // switch outputs. For reliable HEADLESS audio pick a "Windows WASAPI : <output>" device.
