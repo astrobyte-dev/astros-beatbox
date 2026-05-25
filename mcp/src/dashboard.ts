@@ -7,6 +7,19 @@ type CmdHandler = (body: CmdBody) => Promise<string> | string;
 
 // Local dashboard: serves the HTML (read fresh per request so UI edits don't need
 // an MCP reload), exposes /state (JSON) and /cmd (POST control commands).
+// Cap concurrent SSE /clock connections to prevent unbounded timer accumulation.
+const SSE_MAX = 8;
+let sseCount = 0;
+
+// Security headers applied to every response (including 403s).
+const SEC_HEADERS: Record<string, string> = {
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  // Scripts are all src-loaded (no inline scripts); styles use 'unsafe-inline' for the <style> block.
+  "content-security-policy":
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'",
+};
+
 export function startDashboard(
   port: number,
   htmlPath: string,
@@ -15,10 +28,13 @@ export function startDashboard(
   onCmd: CmdHandler,
 ): http.Server {
   const server = http.createServer((req, res) => {
+    // Apply security headers to every response.
+    for (const [k, v] of Object.entries(SEC_HEADERS)) res.setHeader(k, v);
+
     // Loopback-only guard: block DNS-rebinding / cross-site access to this local rig
-    // (which can run arbitrary code via /cmd). Requests must target 127.0.0.1/localhost.
+    // (which can run arbitrary code via /cmd). Fail closed: absent Host is also rejected.
     const hostName = (req.headers.host || "").split(":")[0];
-    if (hostName && hostName !== "127.0.0.1" && hostName !== "localhost") {
+    if (!hostName || (hostName !== "127.0.0.1" && hostName !== "localhost")) {
       res.writeHead(403, { "content-type": "text/plain" });
       res.end("forbidden");
       return;
@@ -62,14 +78,27 @@ export function startDashboard(
       // One-way server->browser; rides the existing http server (no new dependency/port).
       // Pushed at 30Hz; payload carries `age` (ms since the cycle was received) so the
       // browser can anchor precisely without inheriting push-quantization lag.
+      if (sseCount >= SSE_MAX) {
+        res.writeHead(429, { "content-type": "text/plain" });
+        res.end("too many connections");
+        return;
+      }
+      sseCount++;
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
       const send = () => { try { res.write(`data: ${JSON.stringify(getClock())}\n\n`); } catch { /* connection closed */ } };
       send();
       const tick = setInterval(send, 1000 / 30);
-      req.on("close", () => clearInterval(tick));
+      req.on("close", () => { clearInterval(tick); sseCount--; });
       return;
     }
     if (req.method === "POST" && req.url && req.url.startsWith("/cmd")) {
+      // Enforce JSON body: reject non-JSON content types to prevent misuse.
+      const ct = (req.headers["content-type"] ?? "").split(";")[0].trim();
+      if (ct && ct !== "application/json") {
+        res.writeHead(415, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "content-type must be application/json" }));
+        return;
+      }
       // CSRF guard: /cmd runs arbitrary Tidal/SC code, so reject any cross-origin POST.
       // (Same-origin dashboard requests send our own Origin or none; attacker tabs send theirs.)
       const origin = req.headers.origin;
@@ -102,7 +131,7 @@ export function startDashboard(
       res.end("dashboard.html not found");
     }
   });
-  server.on("error", () => { /* port busy etc. */ });
+  server.on("error", (e) => { process.stderr.write(`dashboard server error: ${e}\n`); });
   server.listen(port, "127.0.0.1");
   return server;
 }

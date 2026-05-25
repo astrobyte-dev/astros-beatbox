@@ -28,7 +28,8 @@ export function track(rig: RigState, code: string): void {
 
 // Replace or append `# param value` in a slot's code (used by the live knobs).
 export function applyParam(code: string, param: string, value: number): string {
-  const re = new RegExp(`#\\s*${param}\\s+[^#]*`);
+  const escaped = param.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`#\\s*${escaped}\\s+[^#]*`);
   const updated = re.test(code) ? code.replace(re, `# ${param} ${value} `) : `${code.trim()} # ${param} ${value}`;
   return updated.replace(/\s+/g, " ").trim();
 }
