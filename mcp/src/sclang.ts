@@ -1,5 +1,7 @@
 import { ProcDriver } from "./proc.js";
-import { SCLANG, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, FORM_FEED, AUDIO_DEVICE_FILE } from "./config.js";
+import { sclangFrame } from "./protocol.js";
+import { SCLANG, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, AUDIO_DEVICE_FILE } from "./config.js";
+import { scStr } from "./track.js";
 
 // Drives a headless sclang interpreter (the SuperDirt audio engine).
 // IMPORTANT: evaluate code by sending  <code>\n <0x0C>\n  and keep stdin open;
@@ -8,12 +10,18 @@ export class Sclang extends ProcDriver {
   constructor() {
     // detached: give sclang (and its scsynth child) its own process group/console
     // context so the audio callback thread can run when spawned from Node.
-    super(SCLANG, [], process.env, { detached: true, windowsHide: true });
+    super(SCLANG, [], process.env, { detached: true, windowsHide: true }, true);
   }
 
   /** Evaluate a chunk of SuperCollider code in the running interpreter. */
-  eval(code: string): void {
-    this.writeRaw(code + "\n" + FORM_FEED + "\n");
+  eval(code: string, operationId?: string, timeoutMs?: number) {
+    return this.execute((token) => sclangFrame(code, token), operationId, timeoutMs);
+  }
+
+  // Internal asynchronous work acknowledges from inside the routine, after its
+  // waits/syncs, rather than acknowledging only that it has been scheduled.
+  evalRoutine(code: string, operationId?: string, timeoutMs = 15000) {
+    return this.execute((token) => sclangFrame(code, token, true), operationId, timeoutMs);
   }
 
   /** Boot scsynth + SuperDirt and wait until it's listening on :57120. */
@@ -25,7 +33,7 @@ export class Sclang extends ProcDriver {
     // tell the startup where the audio-device file lives (keeps the user's path out
     // of the committed .scd; the .scd uses ~devFile if set, else a relative fallback).
     const dev = AUDIO_DEVICE_FILE.replace(/\\/g, "/");
-    this.eval(`~devFile = "${dev}"; "${path}".load;`);
+    await this.eval(`~devFile = "${scStr(dev)}"; "${scStr(path)}".load;`);
     await this.waitFor(SUPERDIRT_READY, timeoutMs);
   }
 }

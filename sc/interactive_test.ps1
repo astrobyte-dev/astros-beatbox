@@ -1,3 +1,10 @@
+# Refuse to share audio ports; never take over another user's engine.
+foreach ($audioPort in @(57110,57120)) {
+  $probe = New-Object System.Net.Sockets.UdpClient
+  try { $probe.Client.Bind((New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Loopback, $audioPort))) }
+  catch { throw "Audio port $audioPort is occupied. Close its owner explicitly before running this test." }
+  finally { $probe.Dispose() }
+}
 # Test MCP sclang-driving mechanism with correct execute protocol:
 #   send: <code>\n <0x0C>\n   (newline flushes line-read; form-feed evaluates buffer)
 # Readiness proven by scsynth process + an execution-only marker (built via ++ so the
@@ -57,9 +64,11 @@ if ($ready) {
 "--- output tail ---"
 Get-Content $outFile -Tail 12 -ErrorAction SilentlyContinue
 
+# Ask only our interpreter to stop the audio server it booted.
+if ($ready) { Send-SC 's.quit;' }
 try { $p.StandardInput.Close() } catch {}
 Start-Sleep -Milliseconds 500
 if (-not $p.HasExited) { $p.Kill() }
-Get-Process scsynth,sclang -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Never terminate engines by executable name. Only the handles created above belong to this test.
 Get-EventSubscriber | Unregister-Event -ErrorAction SilentlyContinue
 "TEST_COMPLETE"

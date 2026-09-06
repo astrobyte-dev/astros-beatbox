@@ -14,6 +14,8 @@
 if(~devFile.isNil) { ~devFile = "audio_device.txt" };  // real path injected by the MCP before .load
 ~dev = if(File.exists(~devFile)) { File.readAllString(~devFile).stripWhiteSpace } { "" };
 s = Server.default;
+// Report loss of the audio server even while the language interpreter stays alive.
+ServerQuit.add({ |server| if(server === s) { ("ABX_AUDIO_" ++ "EXIT").postln } });
 // WASAPI direct (not FlexASIO/ASIO): ASIO's callback needs a message pump that a
 // Node-spawned process lacks, so the DSP stays frozen. WASAPI drives this fine headless.
 // Output device is chosen by the dashboard (written to ~devFile): a device name =

@@ -2,6 +2,8 @@
 :set prompt ""
 
 import Sound.Tidal.Boot
+import qualified Control.Exception
+import qualified System.IO
 
 default (Rational, Integer, Double, Pattern String)
 

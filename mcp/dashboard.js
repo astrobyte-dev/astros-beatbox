@@ -91,14 +91,14 @@
   var lphase=0,lpT=performance.now(),sessStart=0,recStart=0,wasRec=false,wasHas=false,lastClk="";
   function fmtT(ms){ var s=Math.floor(ms/1000),m=Math.floor(s/60); s=s%60; return (m<10?"0":"")+m+":"+(s<10?"0":"")+s; }
   function loopTick(){ var now=performance.now(),dt=(now-lpT)/1000; lpT=now;
-    var has=Object.keys(cur.slots||{}).length>0, cps=(cur.tempoBpm||0)/240;
+    var has=Object.keys(cur.slots||{}).length>0&&!stopRequested&&!cur.stopped&&!cur.paused&&cur.status!=="error"&&cur.status!=="disconnected", cps=(cur.tempoBpm||0)/240;
     var ap=Abx.clock.phase();   // audio-cycle phase (pure math in AbxDsp; stateful clk lives here)
     if(has&&ap!=null){ lphase=ap; }                                       // LOCKED to audio cycle
     else if(has&&cps>0){ lphase+=dt*cps; lphase-=Math.floor(lphase); }    // free-run fallback (no clock)
     else lphase=0;
     // guard window.AbxSeq / AbxCurves below: this core loop can start before the later feature
     // scripts finish parsing (inter-script fetch gap), and stays resilient if a module fails to load.
-    if(window.AbxSeq) AbxSeq.songAdvance(ap!=null?ap:lphase);             // pattern-chain bar advance (song mode)
+    if(has&&window.AbxSeq) AbxSeq.songAdvance(ap!=null?ap:lphase);             // pattern-chain bar advance (song mode)
     var lf=document.getElementById("loopfill"); if(lf) lf.style.width=(lphase*100).toFixed(2)+"%";
     if(has&&!wasHas) sessStart=Date.now(); if(!has) sessStart=0; wasHas=has;
     if(cur.recording&&!wasRec) recStart=Date.now(); wasRec=!!cur.recording;
@@ -126,8 +126,37 @@
   function chanColor(dn){ var c=chanRGB(dn); return "rgb("+c[0]+","+c[1]+","+c[2]+")"; }
   function chanColorA(dn,al){ var c=chanRGB(dn); return "rgba("+c[0]+","+c[1]+","+c[2]+","+al+")"; }
   // </colorfns>
-  function send(o){ return fetch("/cmd",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json();}).catch(function(){return{};}); }
-  function cmd(c,slot){ send({cmd:c,slot:slot}); setTimeout(poll,60); }
+  function reportCommand(j){
+    var out=document.getElementById("consoleOut");
+    out.textContent=j.ok===true?j.msg:(j.error||"Command failed; outcome unknown.");
+    out.className=j.ok===true?"ok":"err";
+  }
+  var commandQueue=Promise.resolve(),stopRequested=false;
+  function send(o){
+    var request=Object.assign({},o,{operationId:crypto.randomUUID(),sessionId:cur.sessionId,issuedAt:Date.now()});
+    var result=commandQueue.then(function(){ return fetch("/cmd",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(request)})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j||typeof j.ok!=="boolean") throw new Error("Invalid command response");
+        if(j.ok!==true||["boot","stop","pause","resume","record","save","load","reset","setdevice"].indexOf(o.cmd)>=0) reportCommand(j);
+        poll(); return j;
+      }).catch(function(e){
+        var j={ok:false,error:"Connection failed; command outcome unknown. Check engine state before trying again. "+e.message,operationId:request.operationId};
+        reportCommand(j); return j;
+      }); });
+    commandQueue=result.then(function(){},function(){}); return result;
+  }
+  function cmd(c,slot){
+    if(c==="stop"||c==="pause"){
+      stopRequested=true;
+      // Flush already-painted edits before Stop so a delayed edit cannot restart it.
+      if(window.AbxSeq)AbxSeq.beforeStop();
+      if(window.AbxCurves)AbxCurves.beforeStop();
+      for(var key in pending){ var x=pending[key]; send({cmd:"set",slot:x.slot,param:x.param,value:x.value}); } pending={};
+      return send({cmd:c,slot:slot}).then(function(j){ return poll().then(function(){ stopRequested=false; return j; }); });
+    }
+    return send({cmd:c,slot:slot});
+  }
   // ---- Abx: the shared core surface the dashboard-*.js feature modules consume (instead of
   // reaching for bare globals). state() returns the live polled state; the clock wrapper is one
   // line over AbxDsp so the phase math stays pure + unit-tested. ----
@@ -138,9 +167,9 @@
   // "all on" unmutes everything. Per-layer M buttons / keys 1-9 flip one at a time.
   function allMuted(){ var ks=Object.keys(cur.slots||{}); return ks.length>0 && ks.every(function(k){return (cur.muted||[]).indexOf(k)>=0;}); }
   function toggleAll(){ var ks=Object.keys(cur.slots||{}); if(!ks.length)return;
-    if(allMuted()){ send({cmd:"resume"}); } else { ks.forEach(function(k){ send({cmd:"mute",slot:k}); }); }
+    if(cur.stopped||cur.paused||allMuted()){ send({cmd:"resume"}); } else { ks.forEach(function(k){ send({cmd:"mute",slot:k}); }); }
     setTimeout(poll,140); }
-  function transport(){ if(Object.keys(cur.slots).length===0)return"stopped"; return allMuted()?"paused":"playing"; }
+  function transport(){ if(cur.status==="error"||cur.status==="disconnected")return"unconfirmed"; if(cur.stopped)return"stopped"; if(cur.synchronized===false)return"unconfirmed"; if(Object.keys(cur.slots).length===0)return"stopped"; return cur.paused||allMuted()?"paused":"playing"; }
 
   function surprise(){
     var R=function(a){return a[Math.floor(Math.random()*a.length)];}, RI=function(a,b){return Math.floor(a+Math.random()*(b-a));};
@@ -164,8 +193,8 @@
     var n=parseInt(target.slice(1),10);
     var bodies=live.map(function(k){ return slots[k]; });
     var sil=live.map(function(k){ return k+" silence"; }).join("; ");
-    send({cmd:"eval",value:"do { d"+n+" $ stack ["+bodies.join(", ")+"]; "+sil+" }"});
-    out.textContent="committed "+live.length+" layer(s) -> LOOP on "+target+" — live channels free, build on top!"; out.className="ok";
+    send({cmd:"eval",value:"do { d"+n+" $ stack ["+bodies.join(", ")+"]; "+sil+" }"}).then(function(j){ if(j.ok!==true)return;
+    out.textContent="committed "+live.length+" layer(s) -> LOOP on "+target+" — live channels free, build on top!"; out.className="ok"; });
     setTimeout(poll,220);
   }
 
@@ -214,11 +243,11 @@
     if(window.AbxMixer && AbxMixer.handleClick(b)) return;     // mixer drawer toggle (strip M/S use data-cmd, shared with cards)
     if(b.dataset.act==="run"){ runCode(); return; }
     if(b.dataset.act==="boot"){ var o=document.getElementById("consoleOut"); o.textContent="booting the sound engine… (~30-40s) — watch the status light top-left"; o.className=""; send({cmd:"boot"}).then(function(){poll();}); return; }
-    if(b.dataset.act==="reset"){ if(confirm("Reboot the engine? Wipes everything, fresh start (~30s).")) cmd("reset"); return; }
+    if(b.dataset.act==="reset"){ if(confirm("Restart the engine and replay the tracked patterns (~30s)? Arbitrary interpreter definitions must be evaluated again.")) cmd("reset"); return; }
     if(b.dataset.act==="record"){ cmd("record"); return; }
     if(b.dataset.act==="surprise"){ surprise(); return; }
     if(b.dataset.act==="setloop"){ setLoop(); return; }
-    if(b.dataset.act==="save"){ var n=document.getElementById("setName").value.trim(); if(n){ send({cmd:"save",value:n}).then(loadSetList); document.getElementById("setName").value=""; } return; }
+    if(b.dataset.act==="save"){ var n=document.getElementById("setName").value.trim(); if(n){ send({cmd:"save",value:n}).then(function(j){ if(j.ok===true){ loadSetList(); if(document.getElementById("setName").value.trim()===n)document.getElementById("setName").value=""; } }); } return; }
     if(b.dataset.act==="load"){ var s=document.getElementById("setSelect").value; if(s){ send({cmd:"load",value:s}).then(function(){setTimeout(poll,300);}); } return; }
     if(b.dataset.act==="info"){ var ik=b.dataset.slot; collapsed[ik]=!collapsed[ik]; applyExpl(); return; }
     if(b.dataset.act==="infoall"){ var ks=Object.keys(cur.slots); var anyOpen=ks.some(function(x){return !collapsed[x];}); ks.forEach(function(x){collapsed[x]=anyOpen;}); applyExpl(); return; }
@@ -280,32 +309,35 @@
     if(hist[hist.length-1]!==code) hist.push(code); histIdx=hist.length;
     var runnable=toRunnable(code);
     var out=document.getElementById("consoleOut"); out.textContent="running…"; out.className="";
-    send({cmd:"eval",value:runnable}).then(function(j){ var m=j.msg||"ok";
-      if(runnable!==code && !/error/i.test(m)) m="▶ "+runnable;
-      out.textContent=m; out.className=/error/i.test(m)?"err":"ok"; poll(); });
-    ta.value=""; ta.style.height="34px";
+    send({cmd:"eval",value:runnable}).then(function(j){
+      if(j.ok!==true)return;
+      out.textContent=(runnable!==code?"Evaluated: "+runnable:j.msg)+(j.output?"\n"+j.output:""); out.className="ok";
+      if(ta.value.trim()===code){ ta.value=""; ta.style.height="34px"; }
+    });
   }
 
-  var lastSig="";
+  var lastSig="",lastFault="";
   function render(st){ cur=st;
+    var fault=st.sessionId+":"+st.faultVersion+":"+st.error;
+    if(st.error&&fault!==lastFault){ reportCommand({ok:false,error:st.error}); lastFault=fault; }
     document.getElementById("engdot").className="dot "+(st.status||"");
     document.getElementById("engstate").textContent=st.status||"idle";
     var dragging=Date.now()-lastInput<700;
     if(!dragging){ document.getElementById("bpm").textContent=st.tempoBpm?Math.round(st.tempoBpm):"--"; if(st.tempoBpm)document.getElementById("tempoSlider").value=Math.round(st.tempoBpm); }
     var tr=transport(); document.getElementById("trdot").className="dot "+tr; document.getElementById("trstate").textContent=tr.toUpperCase();
     var bb=document.getElementById("btnBoot"); bb.style.display=(st.status==="ready")?"none":"";
-    var bp=document.getElementById("btnPlay"); bp.innerHTML=allMuted()?"&#128266; All on":"&#128263; All off"; bp.style.display=(tr==="stopped")?"none":"";
+    var bp=document.getElementById("btnPlay"); bp.innerHTML=st.stopped?"&#9654; Play":allMuted()?"&#128266; All on":"&#128263; All off"; bp.style.display=Object.keys(st.slots||{}).length?"":"none";
     var rb=document.getElementById("recBtn"); rb.classList.toggle("on",!!st.recording); rb.innerHTML=st.recording?"&#9632; Rec":"&#9679; Rec";
     updateAudio(st);
     if(Date.now()-(st.meterAge||0)<450){ tgtL=Math.max(tgtL,st.meterL||0); tgtR=Math.max(tgtR,st.meterR||0); }
-    var sig=JSON.stringify({s:st.slots,m:st.muted,so:st.solo,p:st.paused});
+    var sig=JSON.stringify({s:st.slots,m:st.muted,so:st.solo,p:st.paused,stopped:st.stopped});
     if(sig===lastSig||dragging) return; lastSig=sig;
     var muted=st.muted||[],solo=st.solo,keys=Object.keys(st.slots||{}).sort(function(a,b){return parseInt(a.slice(1))-parseInt(b.slice(1));});
     var grid=document.getElementById("grid");
     if(keys.length===0){ grid.innerHTML='<div class="empty">no patterns playing &mdash; <b>type a beat below</b> or hit Surprise me</div>'; return; }
     var loopNames={}; keys.filter(function(k){return /^\s*stack\s*\[/.test(st.slots[k]);}).sort(function(a,b){return parseInt(b.slice(1))-parseInt(a.slice(1));}).forEach(function(k,ix){ loopNames[k]="LOOP_"+(ix+1); });
     var h="";
-    for(var i=0;i<keys.length;i++){ var k=keys[i],isM=muted.indexOf(k)>=0,isS=(solo===k),dim=(solo&&!isS)||isM,c=st.slots[k],isLoop=!!loopNames[k],knobs="";
+    for(var i=0;i<keys.length;i++){ var k=keys[i],isM=muted.indexOf(k)>=0,isS=(solo===k),dim=st.stopped||st.paused||(solo&&!isS)||isM,c=st.slots[k],isLoop=!!loopNames[k],knobs="";
       if(!isLoop) for(var j=0;j<KNOBS.length;j++){ var kn=KNOBS[j],val=fnum(c,kn.p); if(val==null)val=kn.def;
         knobs+='<div class="knob"><span>'+kn.l+'</span><input type="range" min="'+kn.min+'" max="'+kn.max+'" step="'+kn.step+'" value="'+val+'" data-slot="'+k+'" data-param="'+kn.p+'"><b id="v-'+k+'-'+kn.p+'">'+val+'</b></div>'; }
       h+='<div class="card'+(isM?" muted":"")+(isS?" solo":"")+(isLoop?" loop":"")+'">'
@@ -322,7 +354,10 @@
     if(window.AbxCurves) AbxCurves.maybeRerender(keys);
     if(window.AbxMixer) AbxMixer.maybeRerender();
   }
-  function poll(){ fetch("/state").then(function(r){return r.json();}).then(render).catch(function(){
+  var pollSequence=0,renderedSequence=0;
+  function poll(){ var seq=++pollSequence; return fetch("/state").then(function(r){ if(!r.ok)throw new Error("State unavailable"); return r.json();}).then(function(st){ if(seq>renderedSequence){ renderedSequence=seq; render(st); } }).catch(function(){
+    if(seq<renderedSequence)return; cur.status="disconnected"; cur.synchronized=false;
+    document.getElementById("trstate").textContent="UNCONFIRMED";
     document.getElementById("engstate").textContent="disconnected"; document.getElementById("engdot").className="dot error"; }); }
   setInterval(poll,90); poll(); loadSetList();
 

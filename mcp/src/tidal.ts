@@ -1,4 +1,5 @@
 import { ProcDriver } from "./proc.js";
+import { tidalFrame } from "./protocol.js";
 import { GHCI, BOOT_TIDAL, GHCI_PATH, CABAL_DIR, TIDAL_READY } from "./config.js";
 
 // Build a child env with exactly one PATH key. On Windows, spreading
@@ -20,7 +21,7 @@ function ghciEnv(): NodeJS.ProcessEnv {
 // are wrapped in :{ ... :}. Node's stdin.write emits no BOM, so no lexical errors.
 export class Tidal extends ProcDriver {
   constructor() {
-    super(GHCI, ["-ghci-script", BOOT_TIDAL], ghciEnv());
+    super(GHCI, ["-ghci-script", BOOT_TIDAL], ghciEnv(), {}, true);
   }
 
   /** Wait until BootTidal.hs has finished loading (tidal> prompt). */
@@ -29,16 +30,11 @@ export class Tidal extends ProcDriver {
   }
 
   /** Evaluate Tidal code (single or multi-line). */
-  eval(code: string): void {
-    const trimmed = code.replace(/\r\n/g, "\n").trim();
-    if (trimmed.includes("\n")) {
-      this.writeRaw(":{\n" + trimmed + "\n:}\n");
-    } else {
-      this.writeRaw(trimmed + "\n");
-    }
+  eval(code: string, operationId?: string, timeoutMs?: number) {
+    return this.execute((token) => tidalFrame(code, token), operationId, timeoutMs);
   }
 
-  hush(): void {
-    this.writeRaw("hush\n");
+  hush(operationId?: string) {
+    return this.eval("hush", operationId);
   }
 }

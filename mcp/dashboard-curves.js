@@ -20,7 +20,8 @@
     var pr=CURVEPARAMS[c.param]; var str=c.vals.map(function(v){return pr.fmt(pr.lo+v*(pr.hi-pr.lo));}).join(" ");
     var term=c.bars>1?'(slow '+c.bars+' "'+str+'")':'"'+str+'"';
     send({cmd:"eval",value:dn+" $ "+stripped+" # "+c.param+" "+term}); setTimeout(poll,170); }
-  function applyCurveD(dn){ clearTimeout(curveT[dn]); curveT[dn]=setTimeout(function(){applyCurve(dn);},130); }
+  function applyCurveD(dn,ms){ clearTimeout(curveT[dn]); curveT[dn]=setTimeout(function(){delete curveT[dn]; applyCurve(dn);},ms||130); }
+  function beforeStop(){ for(var dn in curveT){ clearTimeout(curveT[dn]); applyCurve(dn); } curveT={}; }
   function drawCurve(cv){ var dn=cv.dataset.dn,c=curves[dn]; if(!c)return;
     var W=cv.clientWidth||600; if(cv.width!==W)cv.width=W; var H=cv.height,ctx=cv.getContext("2d"),n=c.vals.length,bw=W/n;
     ctx.clearRect(0,0,W,H);
@@ -74,7 +75,7 @@
   function handleChange(e){
     if(e.target.classList&&e.target.classList.contains("curveparam")){ var dn=e.target.dataset.dn,c=curveOf(dn),oldp=c.param; c.param=e.target.value;
       var base=Abx.state().slots[dn]; if(base) send({cmd:"eval",value:dn+" $ "+stripParam(stripParam(base,oldp),c.param)});
-      setTimeout(function(){applyCurve(dn);},160); return true; }
+      applyCurveD(dn,160); return true; }
     if(e.target.classList&&e.target.classList.contains("curvebars")){ curveOf(e.target.dataset.dn).bars=+e.target.value; applyCurveD(e.target.dataset.dn); return true; }
     return false;
   }
@@ -87,5 +88,5 @@
   document.addEventListener("pointermove",function(e){ if(painting)paintCurve(painting.cv,e.clientX,e.clientY); });
   document.addEventListener("pointerup",function(){ if(painting){ var dn=painting.dn; painting=null; applyCurve(dn); } });
 
-  window.AbxCurves={ openCurves:openCurves, curveRender:curveRender, handleClick:handleClick, handleChange:handleChange, maybeRerender:maybeRerender };
+  window.AbxCurves={ openCurves:openCurves, curveRender:curveRender, handleClick:handleClick, handleChange:handleChange, maybeRerender:maybeRerender, beforeStop:beforeStop };
 })();

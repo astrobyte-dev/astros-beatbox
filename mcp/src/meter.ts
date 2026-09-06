@@ -18,8 +18,9 @@ export class Meter {
   lead = 0;      // seconds until this event is actually heard (Tidal scheduling latency)
   cycleAt = 0;   // Date.now() when received (browser subtracts age to anchor precisely)
   private sock = dgram.createSocket("udp4");
+  error: string | null = null;
 
-  start(port: number): void {
+  start(port: number): Promise<void> {
     this.sock.on("message", (buf) => {
       const parts = buf.toString("utf8").trim().split(/\s+/);
       if (parts[0] === "MTR") {
@@ -56,9 +57,15 @@ export class Meter {
         this.cycleAt = Date.now();
       }
     });
-    this.sock.on("error", () => { /* ignore */ });
-    this.sock.bind(port, "127.0.0.1");
-    this.sock.unref(); // don't keep the event loop alive on shutdown
+    this.sock.on("error", (e) => { this.error = "Meter unavailable: " + e.message; });
+    return new Promise((resolve, reject) => {
+      this.sock.once("error", reject);
+      this.sock.bind(port, "127.0.0.1", () => {
+        this.sock.off("error", reject);
+        this.sock.unref();
+        resolve();
+      });
+    });
   }
 
   stop(): void {

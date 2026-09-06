@@ -1,3 +1,10 @@
+# Refuse to share audio ports; never take over another user's engine.
+foreach ($audioPort in @(57110,57120)) {
+  $probe = New-Object System.Net.Sockets.UdpClient
+  try { $probe.Client.Bind((New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Loopback, $audioPort))) }
+  catch { throw "Audio port $audioPort is occupied. Close its owner explicitly before running this test." }
+  finally { $probe.Dispose() }
+}
 # FULL CHAIN TEST: SuperDirt (sclang) + TidalCycles (ghci) -> beat through FlexASIO/K11.
 # Writes stdin as raw UTF-8 bytes (no BOM) to avoid GHCi lexical errors.
 $ErrorActionPreference = "Continue"
@@ -78,9 +85,11 @@ Start-Sleep -Seconds 1
 
 # ---- cleanup ----
 try { $td.StandardInput.Close() } catch {}
+# Ask only our interpreter to stop the audio server it booted.
+if ($ready) { Send $sc ('s.quit;' + $NL + $FF + $NL) }
 try { $sc.StandardInput.Close() } catch {}
 Start-Sleep -Milliseconds 600
 foreach ($pr in @($td,$sc)) { if ($pr -and (-not $pr.HasExited)) { try { $pr.Kill() } catch {} } }
-Get-Process scsynth,sclang,ghc,ghci -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Never terminate engines by executable name. Only the handles created above belong to this test.
 Get-EventSubscriber | Unregister-Event -ErrorAction SilentlyContinue
 "FULLCHAIN_TEST_COMPLETE"

@@ -1,61 +1,127 @@
 import { spawn, ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { StringDecoder } from "node:string_decoder";
+import { diagnostic, FrameReader, type Frame, type EvalResult, type OutputStream } from "./protocol.js";
+import { identifyOwnedProcess, stopOwnedProcessTree, type ProcessIdentity } from "./owned-process.js";
 
-// Base driver: spawns a child process, captures stdout+stderr into a rolling
-// buffer, and lets callers wait for a text marker to appear.
-export class ProcDriver {
+export interface DriverFault { kind: "process" | "timeout" | "interpreter"; message: string; operationId?: string; observedDuringOperationId?: string }
+
+// One driver owns one ChildProcess for its lifetime. Queued work and stale output
+// cannot cross engine generations. Startup markers are separate from command ACKs.
+export class ProcDriver extends EventEmitter {
   protected proc: ChildProcess | null = null;
   private buf = "";
-  private static MAX = 256 * 1024;
+  private lines = { stdout: "", stderr: "" };
+  private queue: Promise<unknown> = Promise.resolve();
+  private pending?: { reader: FrameReader; id: string; resolve: (r: EvalResult) => void; reject: (e: Error) => void; timer: NodeJS.Timeout };
+  private unavailable: Error | null = null;
+  private stopping = false;
+  private identity?: ProcessIdentity;
+  readonly generation = randomUUID();
   exited = false;
   exitCode: number | null = null;
 
-  constructor(
-    protected exe: string,
-    protected args: string[] = [],
-    protected env: NodeJS.ProcessEnv = process.env,
-    protected spawnOpts: Record<string, unknown> = {},
-  ) {}
+  constructor(protected exe: string, protected args: string[] = [], protected env: NodeJS.ProcessEnv = process.env, protected spawnOpts: Record<string, unknown> = {}, private ownTree = false) { super(); }
 
   start(): void {
-    this.proc = spawn(this.exe, this.args, { env: this.env, stdio: ["pipe", "pipe", "pipe"], ...this.spawnOpts });
-    const onData = (d: Buffer) => {
-      this.buf += d.toString("utf8");
-      if (this.buf.length > ProcDriver.MAX) this.buf = this.buf.slice(-ProcDriver.MAX);
-    };
-    this.proc.stdout!.on("data", onData);
-    this.proc.stderr!.on("data", onData);
-    this.proc.on("exit", (code) => { this.exited = true; this.exitCode = code; });
-  }
-
-  /** Write raw bytes to stdin (UTF-8, no BOM — unlike .NET StreamWriter). */
-  protected writeRaw(s: string): void {
-    if (!this.proc?.stdin) throw new Error(`${this.exe}: not started`);
-    this.proc.stdin.write(Buffer.from(s, "utf8"));
-  }
-
-  /** Resolve when `marker` appears in output; reject on timeout or early exit. */
-  waitFor(marker: string, timeoutMs: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.buf.includes(marker)) return resolve();
-      const iv = setInterval(() => {
-        if (this.buf.includes(marker)) { cleanup(); resolve(); }
-        else if (this.exited) { cleanup(); reject(new Error(`${this.exe} exited (code ${this.exitCode}) before "${marker}"`)); }
-      }, 150);
-      const to = setTimeout(() => { cleanup(); reject(new Error(`timeout (${timeoutMs}ms) waiting for "${marker}"`)); }, timeoutMs);
-      const cleanup = () => { clearInterval(iv); clearTimeout(to); };
+    if (this.proc || this.unavailable) throw new Error("Driver already started or stopped; create a new generation.");
+    this.proc = spawn(this.exe, this.args, { env: this.env, ...this.spawnOpts, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    this.proc.on("spawn", () => {
+      if (this.ownTree && process.platform === "win32" && this.proc?.pid && !this.exited) {
+        try { this.identity = identifyOwnedProcess(this.proc.pid); }
+        catch (e) { this.fail("process", `Cannot verify interpreter ownership: ${String(e)}`); this.proc.kill(); }
+      }
+    });
+    for (const stream of ["stdout", "stderr"] as const) {
+      const decoder = new StringDecoder("utf8");
+      this.proc[stream]!.on("data", (d: Buffer) => this.receive(stream, decoder.write(d)));
+      this.proc[stream]!.on("end", () => this.receive(stream, decoder.end()));
+    }
+    this.proc.on("error", (e) => this.fail("process", `Cannot start ${this.exe}: ${e.message}`));
+    this.proc.stdin!.on("error", (e) => this.fail("process", `Interpreter input failed: ${e.message}`));
+    this.proc.on("exit", (code, signal) => {
+      this.exited = true; this.exitCode = code;
+      this.fail("process", `${this.exe} exited (${signal ?? code})`);
     });
   }
 
-  /** Last `n` characters of captured output (for surfacing errors). */
-  tail(n = 1500): string {
-    return this.buf.slice(-n);
+  private receive(stream: OutputStream, text: string): void {
+    this.buf = (this.buf + text).slice(-256 * 1024);
+    this.emit("output", text);
+    this.lines[stream] += text;
+    let end: number;
+    while ((end = this.lines[stream].indexOf("\n")) >= 0) {
+      const line = this.lines[stream].slice(0, end).replace(/\r$/, "");
+      this.lines[stream] = this.lines[stream].slice(end + 1);
+      const p = this.pending;
+      p?.reader.line(stream, line);
+      if (line.trim() === "ABX_AUDIO_EXIT" || /server .*exited|server not running/i.test(line) && !line.includes(".compile;")) {
+        this.fail("process", "Audio server stopped: " + line.trim());
+      }
+      if (diagnostic.test(line) && !line.includes('.compile;') && !line.includes('System.IO.')) {
+        // A background Tidal/SC task can fail while an unrelated command is being
+        // evaluated. Record observation context without claiming causal identity.
+        this.emit("fault", { kind: "interpreter", message: line.trim().slice(0, 1000), observedDuringOperationId: p?.id } satisfies DriverFault);
+      }
+      if (p?.reader.complete && this.pending === p) {
+        clearTimeout(p.timer); this.pending = undefined;
+        try { p.resolve(p.reader.result(p.id)); } catch (e) { p.reject(e as Error); }
+      }
+    }
+    if (this.lines[stream].length > 256 * 1024) this.fail("process", "Interpreter output exceeded the line limit.");
   }
 
-  get pid(): number | undefined {
-    return this.proc?.pid;
+  private fail(kind: DriverFault["kind"], message: string): void {
+    this.unavailable ??= new Error(message);
+    const p = this.pending;
+    if (p) { clearTimeout(p.timer); this.pending = undefined; p.reject(new Error(message)); }
+    if (!this.stopping) this.emit("fault", { kind, message, operationId: p?.id } satisfies DriverFault);
+    this.emit("unavailable", this.unavailable);
   }
+
+  protected writeRaw(s: string): void {
+    if (this.unavailable) throw this.unavailable;
+    if (!this.proc?.stdin || this.exited) throw new Error(`${this.exe}: not running`);
+    this.proc.stdin.write(Buffer.from(s, "utf8"));
+  }
+
+  protected execute(build: (token: string) => Frame, operationId: string = randomUUID(), timeoutMs = 10000): Promise<EvalResult> {
+    const run = () => new Promise<EvalResult>((resolve, reject) => {
+      if (this.unavailable) { reject(this.unavailable); return; }
+      const frame = build(`ABX_${this.generation.replace(/-/g, "")}_${randomUUID().replace(/-/g, "")}`);
+      const timer = setTimeout(() => this.fail("timeout", `Interpreter timed out for operation ${operationId}; outcome unknown. Reset before sending more commands.`), timeoutMs);
+      this.pending = { reader: new FrameReader(frame), id: operationId, resolve, reject, timer };
+      try { this.writeRaw(frame.script); } catch (e) { clearTimeout(timer); this.pending = undefined; reject(e); }
+    });
+    const result = this.queue.then(run);
+    this.queue = result.catch(() => {});
+    return result;
+  }
+
+  waitFor(marker: string, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => { clearTimeout(timer); this.off("output", check); this.off("unavailable", failed); };
+      const check = () => { if (this.buf.includes(marker)) { cleanup(); resolve(); } };
+      const failed = (e: Error) => { cleanup(); reject(e); };
+      const timer = setTimeout(() => failed(new Error(`Timeout waiting for startup marker ${marker}`)), timeoutMs);
+      this.on("output", check); this.on("unavailable", failed);
+      if (this.unavailable) failed(this.unavailable); else check();
+    });
+  }
+
+  tail(n = 1500): string { return this.buf.slice(-n); }
+  get pid(): number | undefined { return this.proc?.pid; }
+  get running(): boolean { return !!this.proc?.pid && !this.exited && !this.unavailable; }
 
   stop(): void {
-    try { this.proc?.kill(); } catch { /* ignore */ }
+    this.stopping = true;
+    this.fail("process", "Interpreter stopped; operation cancelled.");
+    try {
+      if (this.identity && !this.exited) stopOwnedProcessTree(this.identity);
+    } finally {
+      // Kill only the direct child handle. Descendants require separate ownership proof.
+      if (this.proc && !this.exited) this.proc.kill();
+    }
   }
 }

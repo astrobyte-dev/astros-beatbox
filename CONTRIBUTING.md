@@ -7,11 +7,15 @@ Thanks for wanting to hack on Astro's Beatbox! It's a small, friendly codebase.
 ```
 mcp/
   src/
-    server.ts     MCP tools + dashboard /cmd handler + /state
+    server.ts     MCP/HTTP adapters + launch/shutdown wiring
+    application.ts serialized commands, acknowledged legacy rig state and retry cache
+    commands.ts   shared command validation and result contract
+    protocol.ts   interpreter frames, in-action acknowledgements and diagnostics
+    owned-process.ts Windows creation identities + verified descendant cleanup
     engine.ts     owns the SuperDirt + Tidal processes, boot/reboot, device enum
     sclang.ts     drives headless sclang (SuperCollider)
     tidal.ts      drives ghci (TidalCycles)
-    proc.ts       base child-process driver (stdout buffer + waitFor marker)
+    proc.ts       owned process driver, framed queue, timeouts and live faults
     meter.ts      UDP listener for live level / spectrum / hit data
     dashboard.ts  tiny HTTP server (serves dashboard.html, /state, /cmd, /sets, /samples)
     config.ts     all paths/ports (auto-detected, env-overridable)
@@ -26,9 +30,15 @@ sets/*.tidal               saved jams
 - **Dashboard-only change** (anything in `dashboard.html`): it's served fresh per request —
   just **refresh the browser**. No build, no reconnect.
 - **Server change** (`src/*.ts`): `npm run build`, then **reconnect** the MCP server in your
-  client (Claude Code: `/mcp` → reconnect). Reconnect kills the old engine, so reconnect
-  *once* — don't stack instances (they fight over port 3737 + the audio device).
+  client (Claude Code: `/mcp` → reconnect). Close the previous connection first. EOF and
+  normal shutdown release owned engines; new instances refuse occupied ports and never
+  evict their owners. A forced termination may require manual cleanup.
+- **Automated tests:** `npm test` builds first; `npm run typecheck` checks types separately.
 - **Smoke test the whole chain:** `npm run selftest` (boots SuperDirt + Tidal and plays a beat).
+- **P0a runtime regression:** `npm run selftest:p0a` checks command errors, Stop/Play,
+  save/load, non-silent WAV recording, retries, timeout quarantine and Reset. It uses
+  a temporary directory and refuses occupied ports.
+- Read [the P0a command contract](docs/p0a-command-boundary.md) before changing acknowledgements or lifecycle code.
 
 ## Gotchas worth knowing
 

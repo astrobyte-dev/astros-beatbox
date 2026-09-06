@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-const FLOOR = 31; // current test count: track 7 + dsp 12 + mixer 12 (raised with the mixer tests)
+const FLOOR = 75; // P0a: original 31 + command, protocol, ownership, HTTP/MCP and dashboard regressions
 
 const distDir = join(dirname(fileURLToPath(import.meta.url)), "dist");
 let files = [];
@@ -35,12 +35,12 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, skipped = 0;
 const stream = run({ files });
-stream.on("test:pass", () => { passed++; });
+stream.on("test:pass", (event) => { if (event.skip) skipped++; else passed++; });
 stream.on("test:fail", () => { failed++; });
 stream.on("end", () => {
-  const total = passed + failed;
+  const total = passed + failed + skipped;
   if (failed > 0) {
     console.error(`\n${failed} of ${total} test(s) FAILED.`);
     process.exitCode = 1;
@@ -49,7 +49,7 @@ stream.on("end", () => {
       `(stale build, or a *.test file stopped being emitted). Failing.`);
     process.exitCode = 1;
   } else {
-    console.log(`\n${total} tests passed (floor ${FLOOR}).`);
+    console.log(`\n${passed} tests passed, ${skipped} skipped (${total} discovered; floor ${FLOOR}).`);
   }
 });
 // Pipe through the spec reporter for the usual readable output; the counts above come from the

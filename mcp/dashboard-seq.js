@@ -81,6 +81,10 @@
     return false;
   }
   // drain queued row/swing edits (called by dashboard.js's 80ms debounce)
+  function beforeStop(){
+    for(var ri in seqNameT){ clearTimeout(seqNameT[ri]); seqApply(seq[+ri]); } seqNameT={};
+    flushPending();
+  }
   function flushPending(){
     for(var sk in pendingSeq){ var rr=pendingSeq[sk]; delete pendingSeq[sk]; seqApply(rr); }
     if(pendingSwing){ pendingSwing=false; seqApplyAll(); }
@@ -130,5 +134,5 @@
     if(samp){ seq[ti].name=samp; seqRender(); seqApply(seq[ti]); setTimeout(poll,160); }
     else if(rw!==""){ var from=+rw; if(from!==ti && seq[from]){ var moved=seq.splice(from,1)[0]; seq.splice(ti,0,moved); seqRender(); } } });
 
-  window.AbxSeq={ openSteps:openSteps, handleClick:handleClick, handleInput:handleInput, flushPending:flushPending, songAdvance:songAdvance, renderPlayhead:renderPlayhead, seedDemo:seedDemo };
+  window.AbxSeq={ openSteps:openSteps, handleClick:handleClick, handleInput:handleInput, flushPending:flushPending, beforeStop:beforeStop, songAdvance:songAdvance, renderPlayhead:renderPlayhead, seedDemo:seedDemo };
 })();

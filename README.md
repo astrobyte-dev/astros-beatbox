@@ -55,7 +55,7 @@ Install these once (all free):
    cabal update
    cabal install tidal --lib
    ```
-5. **Node.js 18+** — <https://nodejs.org/>
+5. **Node.js 20+** — <https://nodejs.org/>
 
 ---
 
@@ -121,3 +121,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow and project layout.
 
 ---
 🤖 Built collaboratively with [Claude Code](https://claude.com/claude-code).
+
+## Command reliability (P0a)
+
+Dashboard and MCP commands now share validation and framed interpreter results.
+Stop keeps tracked patterns, tempo and mute/solo choices; Play resumes them. Explicit
+Tidal hush still clears patterns. Occupied ports fail safely without process takeover.
+
+Saving still uses the existing set format, not a complete session document. See
+[the P0a command contract and validation notes](docs/p0a-command-boundary.md) for
+acknowledgement levels, retries, ownership, recovery limits and test commands.

@@ -6,9 +6,10 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "node run-tests.mjs",
+    "test": "npm run build && node run-tests.mjs",
     "selftest": "node dist/selftest.js",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "selftest:p0a": "npm run build && node dist/p0a-selftest.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

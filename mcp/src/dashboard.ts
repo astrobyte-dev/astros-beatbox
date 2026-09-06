@@ -1,9 +1,9 @@
 import http from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
 import { SETS_DIR, DIRT_SAMPLES_DIR } from "./config.js";
+import type { CommandResult } from "./commands.js";
 
-type CmdBody = { cmd: string; slot?: string; param?: string; value?: number | string };
-type CmdHandler = (body: CmdBody) => Promise<string> | string;
+type CmdHandler = (body: unknown) => Promise<CommandResult>;
 
 // Local dashboard: serves the HTML (read fresh per request so UI edits don't need
 // an MCP reload), exposes /state (JSON) and /cmd (POST control commands).
@@ -108,13 +108,13 @@ export function startDashboard(
         if (!ok) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "forbidden origin" })); return; }
       }
       let body = "";
-      req.on("data", (c) => { body += c; if (body.length > 4096) req.destroy(); });
+      req.on("data", (c) => { body += c; if (body.length > 128 * 1024) req.destroy(); });
       req.on("end", async () => {
         try {
-          const parsed = JSON.parse(body || "{}") as CmdBody;
-          const msg = await onCmd(parsed);
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true, msg }));
+          const result = await onCmd(JSON.parse(body || "{}"));
+          const status = result.ok ? 200 : result.code === "VALIDATION" ? 400 : ["STALE_SESSION", "EXPIRED", "ID_CONFLICT"].includes(result.code) ? 409 : result.code === "BUSY" ? 503 : 500;
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end(JSON.stringify(result));
         } catch (e) {
           res.writeHead(400, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: String(e) }));
