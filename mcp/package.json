@@ -4,22 +4,38 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.studio.json",
+    "dev:studio": "vite --host 127.0.0.1",
     "test": "npm run build && node run-tests.mjs",
     "selftest": "node dist/selftest.js",
     "start": "node dist/server.js",
     "selftest:p0a": "npm run build && node dist/p0a-selftest.js",
     "selftest:p0b": "npm run build && node dist/p0b-selftest.js",
-    "selftest:browser": "npm run build && node browser-selftest.mjs"
+    "selftest:browser": "npm run build && node browser-selftest.mjs",
+    "selftest:studio": "npm run build && node studio-selftest.mjs",
+    "selftest:studio:live": "npm run build && node studio-live-selftest.mjs"
   },
+  "engines": {
+    "node": "24.14.0",
+    "npm": "11.9.0"
+  },
+  "packageManager": "npm@11.9.0",
   "dependencies": {
+    "@fontsource/dm-sans": "5.3.0",
+    "@fontsource/outfit": "5.3.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
-    "playwright": "^1.61.1",
-    "typescript": "^5.6.3"
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1",
+    "playwright": "1.61.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
   }
 }

@@ -28,6 +28,9 @@ try{
   await page.goto('http://127.0.0.1:'+server.address().port+'/#steps');
   await page.locator('[data-act="seqadd"]').click();await wait(()=>app.project.document.tracks.length===1);
   await page.locator('.seqname').fill('bd');await page.locator('.seqname').press('Tab');await wait(()=>app.project.document.assets.some(a=>a.name==='bd'));
+  // The server commit precedes the dashboard poll/render. Wait for that projection
+  // before measuring both pads; otherwise a detached row yields a null box.
+  await page.waitForFunction(rev=>window.Abx.state().project.revision===rev,app.project.document.revision);
   const tid=app.project.document.tracks[0].id,cid=app.project.document.tracks[0].activeClipId;
   const undoBefore=app.project.history.undo;
   const first=page.locator('.pad[data-step="0"]'),second=page.locator('.pad[data-step="1"]');

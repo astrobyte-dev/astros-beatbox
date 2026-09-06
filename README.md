@@ -1,14 +1,18 @@
 # Astro's Beatbox 🎛️
 
-A free, **code-first live-coding music rig** for Windows — describe a beat in plain English (or click it out) and it's playing in seconds, no DAW required.
+A free musical playground for Windows. **Play with sound.** Start a groove, change a rhythm, and keep what you like. The original live-coding dashboard remains available for deeper Tidal workflows.
 
-**Stack:** [TidalCycles](https://tidalcycles.org/) (pattern language) → [SuperCollider](https://supercollider.github.io/) / SuperDirt (synthesis) → WASAPI audio, driven headless by a custom **MCP server** (TypeScript) with a Matrix-themed **web dashboard**.
+**Stack:** React + TypeScript + Vite studio → shared TypeScript project/MCP service → [TidalCycles](https://tidalcycles.org/) → [SuperCollider](https://supercollider.github.io/) / SuperDirt → WASAPI audio. Both interfaces share one recoverable project.
 
 > **Platform:** Windows 10/11 only (uses WASAPI + PowerShell helpers).
 
 ---
 
 ## Screenshots
+
+![The new Astro's Beatbox studio](docs/p1-studio-1440.png)
+
+The new **P1 studio** lives at `/studio`. The screenshots below show the retained classic dashboard at `/`.
 
 ![Astro's Beatbox in action](docs/demo.gif)
 
@@ -24,6 +28,9 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 
 ## Features
 
+- **Studio:** named instruments, keyboard-accessible rhythm pads, painting, velocity, swing, contextual effects, independent mixing, generated code inspection, shared Undo/Redo, complete Save and My Jams.
+- **One curated starter:** Pocket groove, with kick, snare, hi-hat and clap. More library workflows belong to later phases.
+- The following deeper tools remain available in the **classic dashboard**:
 - **Live layer cards** (`d1`–`d16`) — each shows its code, a plain-English explanation, per-layer knobs, and a **live waveform of that channel's own audio**
 - **Per-channel oscilloscope** — every card draws a real, phase-locked waveform tapped from its own voice; plus a master L/R meter and a **wavelength-coloured spectrum** (low freq red → high freq blue)
 - **Mixer view** with all 12 channels as strips: a volume fader, pan, reverb + delay sends, mute/solo, a meter, and a live mini-scope each
@@ -55,7 +62,7 @@ Install these once (all free):
    cabal update
    cabal install tidal --lib
    ```
-5. **Node.js 20+** — <https://nodejs.org/>
+5. **Node.js 24.14.0 and npm 11.9.0** — <https://nodejs.org/>. Pinned in `.nvmrc`, package metadata and CI.
 
 ---
 
@@ -64,7 +71,7 @@ Install these once (all free):
 ```sh
 git clone https://github.com/astrobyte-dev/astros-beatbox.git
 cd astros-beatbox/mcp
-npm install
+npm ci
 npm run build
 ```
 
@@ -95,6 +102,15 @@ absolute path to `mcp/dist/server.js`. Then:
 2. Open the dashboard at **<http://127.0.0.1:3737>**.
 3. Type a beat in the console, click **Surprise me**, or open the **Step grid**.
 4. For reliable audio, pick a **`Windows WASAPI : <your output>`** device from the 🔈 dropdown.
+
+For the new instrument experience, open **<http://127.0.0.1:3737/studio>**.
+Use **Start Pocket groove → Play → edit a pad → Undo → Save jam**. Reopen it from
+**My Jams**. Play prepares the engine if needed. Existing projects open as they are;
+the starter is offered only for an empty project. The built studio is served by the
+same application; no separate production frontend server is needed.
+
+See [the P1 architecture and validation report](docs/p1-studio.md) for scope,
+synchronization, accessibility and remaining limitations.
 
 ### MCP tools
 `boot` · `eval_tidal` · `hush` · `eval_sc` · `status` · `project_status` ·

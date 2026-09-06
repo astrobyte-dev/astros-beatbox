@@ -1,6 +1,8 @@
 # dependencies & build output (regenerated via `npm install && npm run build`)
 mcp/node_modules/
 mcp/dist/
+mcp/studio-dist/
+/docs/p1-studio-failure.png
 
 # recordings & renders (personal / large audio)
 recordings/

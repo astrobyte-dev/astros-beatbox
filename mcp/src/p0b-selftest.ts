@@ -15,7 +15,7 @@ const app = new Application(engine, { sets: dir, recordings: dir, projects: dir,
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function send(cmd: string, args: object = {}) { const p = app.project.document, r = await app.dispatchExternal({ cmd, projectId: p.id, revision: p.revision, ...args }); assert.equal(r.ok, true, JSON.stringify(r)); return r; }
 const edit = (edits: ProjectEdit[]) => send("project.edit", { edits, label: "Live validation" });
-async function levels() { await sleep(350); let l = 0, r = 0; for (let i = 0; i < 6; i++) { await sleep(70); l += meter.l; r += meter.r; } return [l / 6, r / 6]; }
+async function levels() { await sleep(350); let l = 0, r = 0; for (let i = 0; i < 6; i++) { await sleep(70); l += meter.l; r += meter.r; } const result = [l / 6, r / 6]; process.stdout.write("Probe levels: " + result + "\n"); return result; }
 try {
   await meter.start(METER_UDP_PORT); process.stdout.write("P0b: booting owned engines...\n"); await send("boot"); assert.equal(engine.state, "ready", engine.error ?? "");
   const p = app.project.document;
@@ -38,6 +38,11 @@ try {
   const songValues = await engine.tidal.eval(`print $ map (whole) $ queryArc (${song}) (Arc 0 3)`, "arrangement-events");
   assert.match(songValues.output, /Just/);
   await send("song.start"); await sleep(500); await send("song.stop"); await send("stop"); await sleep(1200);
+  // The preceding compiler exercise enables room=0.2. SuperDirt's persistent,
+  // modulated reverb keeps processing the injected sine even after Tidal Stop;
+  // interference makes this supposedly steady measurement vary between runs.
+  // Isolate the held dry probe, retaining all mixer assertions and authored FX.
+  await engine.sclang.evalRoutine("~dirt.orbits.do { |o| o.getGlobalEffect(\\dirt_reverb).synth.set(\\room, 0, \\dry, 1) }; s.sync;", "isolate-held-probe");
   // One finite, unchanging stereo source through the actual Dirt dry+FX monitor
   // path. Faders below cannot retrigger it: only the persistent channel node changes.
   await engine.sclang.evalRoutine(`SynthDef(\\abxHeldProbe, { |out| Out.ar(out, [SinOsc.ar(440, 0, 0.06), SinOsc.ar(660, 0, 0.03)] * EnvGen.kr(Env.linen(0.01, 25, 0.01), doneAction: 2)); }).add; s.sync; ~held1 = Synth.head(~dirt.orbits[0].group, \\abxHeldProbe, [\\out, ~dirt.orbits[0].dryBus.index]); s.sync;`, "held-probe");

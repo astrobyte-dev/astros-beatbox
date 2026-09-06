@@ -1,5 +1,6 @@
 import http from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { SETS_DIR, DIRT_SAMPLES_DIR, PROJECTS_DIR } from "./config.js";
 import type { CommandResult } from "./commands.js";
 
@@ -37,6 +38,22 @@ export function startDashboard(
     if (!hostName || (hostName !== "127.0.0.1" && hostName !== "localhost")) {
       res.writeHead(403, { "content-type": "text/plain" });
       res.end("forbidden");
+      return;
+    }
+    // Vite's production bundle shares this service and the existing guarded API.
+    // Only flat, generated asset names are accepted; never resolve request paths.
+    const urlPath = (req.url || '/').split('?')[0];
+    if (urlPath === '/studio' || urlPath.startsWith('/studio/')) {
+      const asset = /^\/studio\/assets\/([a-zA-Z0-9_-]+\.(?:js|css|woff2?|svg))$/.exec(urlPath);
+      const index = urlPath === '/studio' || urlPath === '/studio/';
+      if (!index && !asset) { res.writeHead(404); res.end('Studio file not found'); return; }
+      try {
+        const root = path.join(path.dirname(htmlPath), 'studio-dist');
+        const data = readFileSync(index ? path.join(root, 'index.html') : path.join(root, 'assets', asset![1]));
+        const types: Record<string, string> = { '.js': 'application/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml' };
+        res.writeHead(200, { 'content-type': index ? 'text/html; charset=utf-8' : types[path.extname(asset![1])], 'cache-control': index ? 'no-store' : 'public, max-age=31536000, immutable' });
+        res.end(data);
+      } catch { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Studio build unavailable. Run npm run build in mcp.'); }
       return;
     }
     // Serve dashboard.js and any dashboard-*.js module (dsp/scope/curves/seq/cheats), read

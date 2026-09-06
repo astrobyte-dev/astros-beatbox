@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-const FLOOR = 101; // All 75 P0a guarantees plus project/compiler/history/storage and adapter regressions.
+const FLOOR = 107; // P0a/P0b guarantees plus studio read model, starter, sync and production serving.
 
 const distDir = join(dirname(fileURLToPath(import.meta.url)), "dist");
 let files = [];

@@ -19,13 +19,35 @@ mcp/
     meter.ts      UDP listener for live level / spectrum / hit data
     dashboard.ts  tiny HTTP server (serves dashboard.html, /state, /cmd, /sets, /samples)
     config.ts     all paths/ports (auto-detected, env-overridable)
-  dashboard.html  the entire web UI (vanilla JS, no build step)
+  dashboard.html  retained classic UI (vanilla JS, no frontend build step)
+  studio/src/     React instrument UI, contextual inspector and gesture drafts
+  studio-dist/    generated Vite assets, served at /studio by dashboard.ts
+  src/studio-client.ts  disposable server snapshot subscription + guarded commands
+  src/studio-starter.ts curated P0b edit intention, no independent music model
 sc/superdirt_startup.scd   SuperCollider boot (headless-safe; reads audio_device.txt)
 tidal/BootTidal.hs         Tidal boot script
 sets/*.tidal               saved jams
 ```
 
 ## Dev workflow
+
+Use **Node 24.14.0 / npm 11.9.0** (`.nvmrc`) and `npm ci` in `mcp`.
+The frontend pins React 19.2.8, Vite 8.2.2, TypeScript 5.9.3 and the React plugin
+6.1.1. `npm run build` builds server and studio; `npm run typecheck` checks both.
+Outfit and DM Sans are bundled locally, with no font CDN dependency.
+
+- **Studio changes:** `npm run build`, then refresh `/studio`. For hot reload,
+  keep the normal application running and use `npm run dev:studio`; Vite proxies
+  `/state`, `/cmd`, `/clock` and `/projects` to `127.0.0.1:3737` (override with
+  `TIDAL_DASH_PORT`). Vite is development-only. Production uses the existing service.
+- **Studio browser regression:** `npm run selftest:studio` checks the built frontend
+  in Chromium against real project/storage services, fake audio, the classic UI,
+  and a real MCP stdio server. Screenshots go to `docs/p1-studio-*.png`.
+- **Studio live proof:** `npm run selftest:studio:live` uses Chromium and real owned
+  engines to test starter playback, rhythm application, Undo, Save/reopen, recording
+  and Pause. Run all audio selftests sequentially; they refuse occupied ports.
+- Read [the P1 report](docs/p1-studio.md) before extending the studio. React holds
+  input drafts and selection only; do not introduce a second authored document.
 
 - **Dashboard-only change** (anything in `dashboard.html`): it's served fresh per request —
   just **refresh the browser**. No build, no reconnect.
