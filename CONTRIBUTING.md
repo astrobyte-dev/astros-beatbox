@@ -7,7 +7,12 @@ Thanks for wanting to hack on Astro's Beatbox! It's a small, friendly codebase.
 ```
 mcp/
   src/
-    server.ts     MCP/HTTP adapters + launch/shutdown wiring
+    server.ts     compatible MCP stdio adapter to the persistent runtime
+    runtime.ts    owns application, HTTP, meter and engine lifetimes
+    runtime-client.ts identifies or starts the detached local runtime
+    sound-library.ts stable sample identity, file fingerprints and library catalogue
+    preview.ts    managed-engine audition, outside project history
+    recordings.ts recording catalogue, WAV validation and retrieval
     application.ts serialized commands, acknowledged legacy rig state and retry cache
     commands.ts   shared command validation and result contract
     protocol.ts   interpreter frames, in-action acknowledgements and diagnostics
@@ -38,7 +43,7 @@ Outfit and DM Sans are bundled locally, with no font CDN dependency.
 
 - **Studio changes:** `npm run build`, then refresh `/studio`. For hot reload,
   keep the normal application running and use `npm run dev:studio`; Vite proxies
-  `/state`, `/cmd`, `/clock` and `/projects` to `127.0.0.1:3737` (override with
+  `/state`, `/cmd`, `/clock`, `/projects`, `/sounds` and `/recordings` to `127.0.0.1:3737` (override with
   `TIDAL_DASH_PORT`). Vite is development-only. Production uses the existing service.
 - **Studio browser regression:** `npm run selftest:studio` checks the built frontend
   in Chromium against real project/storage services, fake audio, the classic UI,
@@ -51,10 +56,24 @@ Outfit and DM Sans are bundled locally, with no font CDN dependency.
 
 - **Dashboard-only change** (anything in `dashboard.html`): it's served fresh per request —
   just **refresh the browser**. No build, no reconnect.
-- **Server change** (`src/*.ts`): `npm run build`, then **reconnect** the MCP server in your
-  client (Claude Code: `/mcp` → reconnect). Close the previous connection first. EOF and
-  normal shutdown release owned engines; new instances refuse occupied ports and never
-  evict their owners. A forced termination may require manual cleanup.
+- **Server change** (`src/*.ts`): run `npm run runtime:stop`, then `npm run build`,
+  then reconnect MCP. Reconnecting alone preserves the existing runtime and its
+  loaded backend code. The runtime log is `.abx-recovery/runtime.log`. Shutdown
+  only releases engines owned by that runtime; occupied ports are never evicted.
+  Port zero is an explicit ephemeral mode for tests. Forced termination leaves
+  active takes interrupted on the next startup; use the stop command to finalize.
+- **P2 browser journey:** `npm run selftest:p2` exercises sound preview/replacement,
+  Undo/Redo, saved identity, recording lifecycle, browser playback, download,
+  catalogue persistence and frontend reconnect using deterministic fake audio.
+- **P2 Windows audio journey:** `npm run selftest:p2:live` runs the same browser
+  journey through real Tidal/SuperDirt, then simultaneously records the physical
+  output and the application's mix-only tap to prove preview exclusion. Evidence
+  goes to `docs/p2-audio-measurements.json` and ignored `recordings/p2-validation/`.
+- **P2 live MCP reconnect:** `npm run selftest:runtime:live` closes and reconnects
+  actual MCP clients and a browser while the persistent engine plays and records.
+  Meter and WAV evidence goes to `docs/p2-runtime-measurements.json`.
+- Run every live test sequentially after stopping the normal rig. Read the
+  [P2 report](docs/p2-creative-loop.md) for current validation status and limits.
 - **Automated tests:** `npm test` builds first; `npm run typecheck` checks types separately.
 - **Smoke test the whole chain:** `npm run selftest` (boots SuperDirt + Tidal and plays a beat).
 - **P0a runtime regression:** `npm run selftest:p0a` checks command errors, Stop/Play,

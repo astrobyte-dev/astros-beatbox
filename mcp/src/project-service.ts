@@ -1,7 +1,7 @@
-import { existsSync, readdirSync } from "node:fs";
-import path from "node:path";
+import { existsSync } from "node:fs";
 import { applyEdits, clone, emptyProject, validateProject, type ProjectDocument } from "./project.js";
 import { ProjectStorage } from "./project-storage.js";
+import { resolveSample } from "./sound-library.js";
 
 export class ProjectConflict extends Error { readonly code = "STALE_PROJECT"; }
 type HistoryEntry = { before: ProjectDocument; after: ProjectDocument; label: string; group?: string; at: number };
@@ -65,7 +65,7 @@ export class ProjectService {
       let status: "available" | "missing" | "unverified" = "unverified";
       if (a.kind === "file") status = existsSync(a.reference) ? "unverified" : "missing";
       if (a.kind === "sample" && sampleDirectory) {
-        try { const files = readdirSync(path.join(sampleDirectory, a.reference)).filter(f => /\.(wav|aif|aiff|flac)$/i.test(f)); status = a.index < files.length ? "available" : "missing"; } catch { status = "missing"; }
+        status = resolveSample(a, sampleDirectory).status;
       }
       return { id: a.id, status, reference: a.reference };
     });

@@ -11,7 +11,7 @@ const params = z.record(parameterSchema, finite).superRefine((p, ctx) => {
   for (const [k, v] of Object.entries(p)) { const [lo, hi] = ranges[k as Parameter]; if (v! < lo || v! > hi) ctx.addIssue({ code: "custom", message: "Parameter out of range: " + k }); }
 });
 const mixerSchema = z.object({ level: finite.min(0).max(2), balance: finite.min(-1).max(1), mute: z.boolean(), solo: z.boolean() }).strict();
-const assetSchema = z.object({ id, kind: z.enum(["sample", "synth", "file"]), reference: z.string().min(1).max(2048), name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), index: z.number().int().min(0).max(65535) }).strict();
+const assetSchema = z.object({ id, kind: z.enum(["sample", "synth", "file"]), reference: z.string().min(1).max(2048), name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), index: z.number().int().min(0).max(65535), source: z.object({ library: z.string().min(1).max(100), origin: z.enum(["bundled", "external"]), file: z.string().regex(/^[a-zA-Z0-9_-]+\/[^/\\\x00-\x1f]+$/).max(1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict();
 const clipBase = { id, trackId: id, name: z.string().max(120) };
 export const clipSchema = z.discriminatedUnion("kind", [
   z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), parameters: params }).strict(),

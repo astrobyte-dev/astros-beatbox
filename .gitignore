@@ -19,6 +19,7 @@ tidal_fc.log
 
 # disposable browser failure output (validation evidence is kept in docs)
 /docs/p0b-dashboard-failure.png
+/docs/p2-failure.png
 
 # editor / OS
 .vscode/

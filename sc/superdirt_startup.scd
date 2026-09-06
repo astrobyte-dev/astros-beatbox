@@ -42,7 +42,7 @@ Routine({
     s.bootSync;
     ~dirt = SuperDirt(2, s);
 
-    ~dirt.loadSoundFiles;                 // default Dirt-Samples
+    ~dirt.loadSoundFiles(~samplePath);    // same configured Dirt-Samples as the application catalog
     // (to add your own samples later: ~dirt.loadSoundFiles("C:/path/to/samples/*");
     //  as a plain statement here — do NOT wrap a `var` in a nested ( ) inside this routine.)
 

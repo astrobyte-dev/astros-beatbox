@@ -1,5 +1,6 @@
 import type { ProjectDocument, ProjectEdit } from "./project.js";
 import type { Command, CommandResult } from "./commands.js";
+import type { RecordingEntry } from "./recordings.js";
 
 export interface StudioState {
   project: ProjectDocument;
@@ -13,6 +14,10 @@ export interface StudioState {
   recording: boolean;
   recordingUnconfirmed?: boolean;
   recPath?: string;
+  recordingState?: RecordingEntry | null;
+  recordings?: RecordingEntry[];
+  recordingWarning?: string | null;
+  preview?: { state: string; key: string | null; error: string | null };
   history: {
     undo: number;
     redo: number;
@@ -115,6 +120,7 @@ export class StudioClient {
         recording,
         recordingUnconfirmed,
         recPath,
+        recordingState, recordings, recordingWarning, preview,
         history,
         workspace,
         projectRuntime,
@@ -133,6 +139,7 @@ export class StudioClient {
         recording,
         recordingUnconfirmed,
         recPath,
+        recordingState, recordings, recordingWarning, preview,
         history,
         workspace,
         projectRuntime,
@@ -183,14 +190,14 @@ export class StudioClient {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...command,
-          projectId: base.id,
-          revision: base.revision,
+          ...(!command.cmd.startsWith("preview.") && !command.cmd.startsWith("record") ? { projectId: base.id, revision: base.revision } : {}),
           operationId: globalThis.crypto.randomUUID(),
           sessionId: base.sessionId,
           issuedAt: Date.now(),
         }),
       });
       const result = (await response.json()) as CommandResult;
+      if (result.sessionId !== base.sessionId || this.state?.sessionId !== base.sessionId || result.generation < (this.state?.generation ?? 0)) throw new Error("Runtime changed before this response arrived. The old result cannot confirm the current session.");
       if (!response.ok || !result.ok)
         throw new Error(
           !result.ok ? result.error : "The action was not confirmed.",

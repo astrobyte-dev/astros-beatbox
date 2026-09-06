@@ -9,7 +9,7 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     proxy: Object.fromEntries(
-      ["/state", "/cmd", "/clock", "/projects"].map((p) => [
+      ["/state", "/cmd", "/clock", "/projects", "/sounds", "/recordings"].map((p) => [
         p,
         "http://127.0.0.1:" + (process.env.TIDAL_DASH_PORT || "3737"),
       ]),

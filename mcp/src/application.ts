@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { validateCommand, requiresProjectRevision, type Command, type CommandResult } from "./commands.js";
 import { track, scStr, type RigState } from "./track.js";
@@ -8,10 +8,15 @@ import { ProjectService, ProjectConflict } from "./project-service.js";
 import { ProjectStorage } from "./project-storage.js";
 import { clone, emptyProject, uid, type ProjectDocument, type ProjectEdit, type Parameter } from "./project.js";
 import { projectSlots, compileArrangement, mixerCommand } from "./project-compiler.js";
+import { libraryAsset, resolveSample, soundLibrary } from "./sound-library.js";
+import { Preview } from "./preview.js";
+import { RecordingCatalog, validateWav } from "./recordings.js";
+import type { Asset } from "./sound-library.js";
 
 export interface CommandEngine {
   generation: number; running: boolean; state: string; error: string | null;
   ensureBooted(): Promise<void>; reboot(): Promise<void>; assertGeneration(generation: number): void;
+  assertSampleLoaded?(asset: Asset): void;
   tidal: { eval(code: string, id?: string): Promise<EvalResult>; hush(id?: string): Promise<EvalResult> };
   sclang: { eval(code: string, id?: string): Promise<EvalResult>; evalRoutine(code: string, id?: string): Promise<EvalResult> };
 }
@@ -29,12 +34,27 @@ export class Application {
   static readonly RETRY_MS = 5 * 60 * 1000;
 
   readonly project: ProjectService;
+  readonly recordings: RecordingCatalog;
+  readonly preview: Preview;
+  private recordingId: string | null = null;
+  private recordingGeneration: number | null = null;
+  private recorderUncertain = false;
   readonly runtime = { appliedRevision: null as number | null, appliedProjectId: null as string | null, song: false, error: null as string | null };
   constructor(readonly engine: CommandEngine, private paths: ApplicationPaths) {
+    this.recordings = new RecordingCatalog(paths.recordings);
+    this.preview = new Preview(engine, paths.samples);
     this.project = new ProjectService(paths.projects && paths.recovery ? new ProjectStorage(paths.projects, paths.recovery) : undefined);
     if (this.project.workspace.recovered) { this.projectRig(); this.rig.stopped = true; this.rig.paused = true; }
   }
-  projectState() { return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.project.assets(this.paths.samples) }; }
+  projectState() {
+    if (this.rig.recording && (!this.engine.running || this.recordingGeneration !== this.engine.generation) && this.recordingId) {
+      this.recordings.fail(this.recordingId, "Audio engine ended before this take could be finalized.", "interrupted");
+      this.rig.recording = false;
+    }
+    return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.project.assets(this.paths.samples), preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
+  }
+  sounds() { return soundLibrary(this.paths.samples); }
+  async drain() { await this.queue; }
   private appliedGeneration: number | null = null;
   dispatchExternal(input: unknown): Promise<CommandResult> {
     try { const c = validateCommand(input); if (requiresProjectRevision(c.cmd) && c.projectId === undefined) return Promise.resolve(this.failure(c.operationId ?? uid(), "STALE_PROJECT", "Read status and provide projectId and revision before editing or executing music.")); }
@@ -91,6 +111,20 @@ export class Application {
     return { ok: false, operationId: id, sessionId: this.sessionId, generation: this.engine.generation, projectId: this.project.document.id, revision: this.project.document.revision, code, error: (e instanceof Error ? e.message : String(e)).slice(-16000) };
   }
   private managed(p = this.project.document): boolean { return p.clips.some(c => c.kind === "steps" || c.managed); }
+  private async verifySamples(p: ProjectDocument, id: string): Promise<void> {
+    const active = new Set(this.runtime.song ? p.arrangement.flatMap(a => Object.values(p.scenes.find(s => s.id === a.sceneId)!.clips)) : p.tracks.map(t => t.activeClipId));
+    const assets = new Set(p.clips.filter(c => active.has(c.id) && c.kind === "steps").map(c => (c as { assetId: string }).assetId));
+    const checks: string[] = [];
+    for (const a of p.assets) if (assets.has(a.id) && a.kind === "sample" && a.source && resolveSample(a, this.paths.samples).status === "available") {
+      this.engine.assertSampleLoaded?.(a);
+      const index = resolveSample(a, this.paths.samples).index;
+      const file = scStr(path.resolve(this.paths.samples!, a.source.file).replace(/\\/g, "/"));
+      // SC standardizePath can retain Windows backslashes; normalize separators
+      // on both sides while still comparing the entire loaded file path.
+      checks.push(`{ var buffers = ~dirt.soundLibrary.buffers["${scStr(a.name)}".asSymbol], b; if(buffers.isNil or: { buffers.size <= ${index} }) { Error("Saved sample is not loaded").throw }; b = buffers[${index}]; if(b.path.standardizePath.replace(92.asAscii.asString, "/") != "${file}".standardizePath.replace(92.asAscii.asString, "/") or: { b.numFrames <= 0 }) { Error("Loaded sample identity differs; Reset audio").throw }; }.value;`);
+    }
+    if (checks.length) await this.sc(checks.join(" ") + " s.sync;", id, true);
+  }
   private audioSlots(p: ProjectDocument): Record<string, string> {
     // SuperDirt wraps out-of-range sample indices. Silence explicitly missing
     // references instead of allowing that silent substitution, retaining the document.
@@ -99,6 +133,7 @@ export class Application {
     // before playback. Never accidentally play a built-in with the same name.
     for (const a of p.assets) if (a.kind === "file") missing.add(a.id);
     const safe = clone(p), clips = new Set(safe.clips.filter(c => c.kind === "steps" && missing.has(c.assetId)).map(c => c.id));
+    for (const a of safe.assets) if (a.kind === "sample") a.index = resolveSample(a, this.paths.samples).index;
     for (const t of safe.tracks) if (t.activeClipId && clips.has(t.activeClipId)) t.activeClipId = null;
     for (const s of safe.scenes) for (const k of Object.keys(s.clips)) if (s.clips[k] && clips.has(s.clips[k]!)) s.clips[k] = null;
     return this.runtime.song ? compileArrangement(safe) : projectSlots(safe);
@@ -108,6 +143,7 @@ export class Application {
     const before = this.audioSlots(previous), after = this.audioSlots(next);
     const mixing = this.managed(next) || this.managed(previous);
     try {
+      if (!this.rig.stopped && !this.rig.paused && (force || JSON.stringify(before) !== JSON.stringify(after))) await this.verifySamples(next, id);
       if (mixing && (force || mixerCommand(next) !== mixerCommand(previous))) await this.sc(mixerCommand(next), id, true);
       const solo = next.tracks.some(t => t.mixer.solo);
       for (const t of next.tracks.filter(t => t.channel === null)) {
@@ -141,6 +177,23 @@ export class Application {
     }
   }
   private async execute(c: Command, id: string): Promise<{ msg: string; output?: string; acknowledgement?: EvalResult["acknowledgement"] }> {
+    if (c.cmd === "preview.play") { await this.preview.play(String(c.value), id); return { msg: "Preview playing through your audio output" }; }
+    if (c.cmd === "preview.stop") { await this.preview.stop(id); return { msg: "Preview stopped" }; }
+    if (c.cmd === "sound.replace") {
+      const asset = libraryAsset(this.paths.samples, String(c.value), uid());
+      const next = this.project.prepare([{ type: "asset.put", asset }, { type: "sound.set", clipId: c.clipId!, assetId: asset.id }]);
+      if (this.preview.snapshot().state === "previewing") await this.preview.stop(id);
+      await this.changeProject(next, { ...c, label: "Replace sound" }, id);
+      return { msg: "Sound replaced; rhythm and effects kept" };
+    }
+    if (c.cmd === "record.start" || c.cmd === "record" && !this.rig.recording) { await this.startRecording(id); return { msg: "Recording your jam" }; }
+    if (c.cmd === "record.stop" || c.cmd === "record") {
+      const target = c.cmd === "record.stop" ? String(c.value) : this.recordingId;
+      const entry = target ? this.recordings.get(target) : null;
+      if (entry?.state === "ready") { this.recordings.retrieve(entry.id); return { msg: "Recording ready. Find it in Recordings." }; }
+      if (!target || target !== this.recordingId || !this.rig.recording) throw new Error(entry?.error ?? "This recording is not active or ready");
+      await this.finishRecording(id); return { msg: "Recording ready. Find it in Recordings." };
+    }
     if (c.cmd === "project.edit") { await this.changeProject(this.project.prepare(c.edits), c, id); for (const e of c.edits!) if (e.type === "scene.activate") this.project.workspace.selectedSceneId = e.sceneId; return { msg: c.label! }; }
     if (c.cmd === "project.undo" || c.cmd === "project.redo") { const redo = c.cmd === "project.redo"; await this.changeProject(this.project.historyTarget(redo), c, id, redo ? "redo" : "undo"); return { msg: redo ? "Redone" : "Undone" }; }
     if (c.cmd === "project.save") { if (!this.project.storage) throw new Error("Project storage not configured"); this.project.storage.save(String(c.value), this.project.document); return { msg: "Saved complete project: " + c.value }; }
@@ -216,6 +269,7 @@ export class Application {
   private async restore(id: string): Promise<void> {
     const r = this.rig;
     if (this.managed()) {
+      if (!r.stopped && !r.paused) await this.verifySamples(this.project.document, id);
       await this.tidal("hush", id); await this.tidal("unmuteAll >> unsoloAll", id);
       const p = this.project.document;
       await this.sc(mixerCommand(p), id, true);
@@ -235,14 +289,40 @@ export class Application {
     r.synchronized = true;
   }
 
+  private async startRecording(id: string): Promise<void> {
+    if (this.recorderUncertain) throw new Error("Recorder cleanup is uncertain. Reset the audio engine before starting another take.");
+    if (this.rig.recording) return;
+    const entry = this.recordings.create(this.project.document.id, this.project.document.name);
+    this.recordingId = entry.id;
+    this.rig.recPath = this.recordings.file(entry.id).replace(/\\/g, "/");
+    try {
+      await this.engine.ensureBooted();
+      if (this.engine.state !== "ready") throw new Error("Audio must be ready before recording");
+      this.recordingGeneration = this.engine.generation;
+      await this.sc(`SynthDef(\\diskrec, { |buf, bus| DiskOut.ar(buf, In.ar(bus,2)) }).add; ~recBuf = Buffer.alloc(s, 65536, 2); s.sync; ~recBuf.write("${scStr(this.rig.recPath)}", "wav", "int16", 0, 0, true); s.sync; ~recSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf, ~recBuf.bufnum, \\bus, ~abxRecordBus.index]); s.sync;`, id, true);
+      this.rig.recording = true; this.recordingGeneration = this.engine.generation;
+      this.recordings.update(entry.id, { state: "recording" });
+    } catch (e) {
+      try { await this.sc("~recSynth.free; s.sync; ~recBuf.close; s.sync; ~recBuf.free; s.sync;", id, true); this.rig.recording = false; } catch { this.recorderUncertain = true; }
+      this.recordings.fail(entry.id, String(e));
+      throw e;
+    }
+  }
   private async finishRecording(id: string): Promise<void> {
-    await this.sc("~recSynth.free; ~recBuf.close; s.sync; ~recBuf.free; s.sync;", id, true);
-    this.rig.recording = false;
-    if (!existsSync(this.rig.recPath) || statSync(this.rig.recPath).size < 44) throw new Error("Recorder stopped, but no valid-sized WAV was found: " + this.rig.recPath);
-    const fd = openSync(this.rig.recPath, "r"), header = Buffer.alloc(12);
-    try { readSync(fd, header, 0, 12, 0); } finally { closeSync(fd); }
-    if (header.toString("ascii", 0, 4) !== "RIFF" || header.toString("ascii", 8, 12) !== "WAVE" || header.readUInt32LE(4) + 8 !== statSync(this.rig.recPath).size) {
-      throw new Error("Recorder stopped, but WAV finalization could not be verified: " + this.rig.recPath);
+    const target = this.recordingId!;
+    try {
+      this.recordings.update(target, { state: "finalizing" });
+      if (this.recordingGeneration !== this.engine.generation) throw new Error("Recording engine generation changed");
+      // Stop the writer before closing its buffer; both barriers precede validation.
+      await this.sc("~recSynth.free; s.sync; ~recBuf.close; s.sync; ~recBuf.free; s.sync;", id, true);
+      this.rig.recording = false;
+      this.recorderUncertain = false;
+      const audio = validateWav(this.rig.recPath);
+      this.recordings.update(target, { state: "ready", audio, finishedAt: new Date().toISOString() });
+    } catch (e) {
+      this.recorderUncertain = this.rig.recording;
+      this.recordings.fail(target, String(e));
+      throw e;
     }
   }
 
@@ -265,13 +345,13 @@ export class Application {
     }
     if (c.cmd === "reset" || c.cmd === "setdevice") {
       let recordingFailure = "";
-      if (r.recording) {
+      if (r.recording || this.recorderUncertain) {
         try { await this.finishRecording(id); }
         catch (e) { recordingFailure = "Recording finalization was not confirmed: " + r.recPath + ". " + String(e); }
       }
       if (c.cmd === "setdevice") writeFileSync(this.paths.device, String(c.value).trim(), "utf8");
       r.synchronized = false;
-      await this.engine.reboot(); r.recording = false; await this.restore(id);
+      await this.engine.reboot(); r.recording = false; this.recorderUncertain = false; await this.restore(id);
       if (recordingFailure) throw new Error("Engine restarted and patterns restored. " + recordingFailure);
       return { msg: "engine restarted; patterns and mute/solo settings restored" };
     }
@@ -320,12 +400,6 @@ export class Application {
         catch (e) { r.slots = saved; r.tempoBpm = bpm; try { await this.restore(id); } catch { r.synchronized = false; } throw new Error("Set load failed; previous set retained. " + String(e)); }
         Object.assign(r, next); r.synchronized = true; return { msg: "loaded set: " + c.value };
       }
-      case "record":
-        if (r.recording) { await this.finishRecording(id); return { msg: "saved recording: " + r.recPath }; }
-        mkdirSync(this.paths.recordings, { recursive: true });
-        const file = path.join(this.paths.recordings, "jam-" + new Date().toISOString().replace(/[:.]/g, "-") + ".wav").replace(/\\/g, "/");
-        await this.sc(`SynthDef(\\diskrec, { |buf| DiskOut.ar(buf, In.ar(0,2)) }).add; ~recBuf = Buffer.alloc(s, 65536, 2); s.sync; ~recBuf.write("${scStr(file)}", "wav", "int16", 0, 0, true); s.sync; ~recSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf, ~recBuf.bufnum]); s.sync;`, id, true);
-        r.recPath = file; r.recording = true; return { msg: "recording → " + path.basename(file) };
       default: throw new Error("Unsupported command " + c.cmd);
     }
   }

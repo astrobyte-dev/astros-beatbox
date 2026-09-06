@@ -4,6 +4,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { Sclang } from "./sclang.js";
 import { Tidal } from "./tidal.js";
 import { CHANNEL_SYNTH } from "./project-compiler.js";
+import { PREVIEW_SYNTHS } from "./preview.js";
+import path from "node:path";
+import { soundLibrary, fingerprint, resolveSample, type Asset } from "./sound-library.js";
+import { DIRT_SAMPLES_DIR } from "./config.js";
 import { METER_UDP_PORT, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE, SCOPE_ENABLED, SCOPE_RMS_HZ, SCOPE_WAVE_N, SCOPE_WAVE_MS } from "./config.js";
 
 // Never take over another server. Only probe availability; do not identify or kill
@@ -32,6 +36,13 @@ export class Engine {
   faultVersion = 0;
   lastFault: (DriverFault & { generation: number; at: number; interpreter: string }) | null = null;
   private fatal = false;
+  private loadedSamples = new Map<string, { hash: string; index: number }>();
+
+  assertSampleLoaded(asset: Asset): void {
+    if (!asset.source) return;
+    const loaded = this.loadedSamples.get(asset.source.file);
+    if (!loaded || loaded.hash !== asset.source.sha256 || loaded.index !== resolveSample(asset, DIRT_SAMPLES_DIR).index) throw new Error("The sound library changed after audio preparation. Reset audio before using this sound.");
+  }
 
   constructor(private checkPorts = assertAudioPortsFree) { this.observe(); }
 
@@ -73,6 +84,7 @@ export class Engine {
       this.currentDevice = this.readDeviceFile();
       this.bootPromise = (async () => {
         await this.checkPorts(); check();
+        this.loadedSamples = new Map(soundLibrary(DIRT_SAMPLES_DIR).map(s => [s.key, { hash: fingerprint(path.join(DIRT_SAMPLES_DIR, s.key)), index: s.index }]));
         sc.start(); await sc.bootSuperDirt(); check();
         td.start(); await td.waitConnected(); check();
         // GHCi can continue to a later prompt after a boot-file error. Force the
@@ -83,6 +95,12 @@ export class Engine {
         await this.installMaster(); check();
         await this.installScope(); check();
         await this.queryDevices(); check();
+        // Detect changes during boot as well as later replacement. Loaded buffer
+        // ordering belongs to this engine generation, not a fresh UI directory scan.
+        for (const sound of soundLibrary(DIRT_SAMPLES_DIR)) {
+          const loaded = this.loadedSamples.get(sound.key);
+          if (loaded && loaded.hash !== fingerprint(path.join(DIRT_SAMPLES_DIR, sound.key))) this.loadedSamples.delete(sound.key);
+        }
         if (this.fatal) throw new Error(this.error || "Engine failed during boot");
         this.state = this.error ? "degraded" : "ready";
       })().catch((e) => {
@@ -103,13 +121,18 @@ export class Engine {
 
   private async installMaster(): Promise<void> {
     const code =
+      PREVIEW_SYNTHS +
+      `SynthDef(\\abxRecordTap, { |bus| ReplaceOut.ar(bus, In.ar(0, 2)) }).add; ` +
       `SynthDef(\\masterLimiter, { ReplaceOut.ar(0, Limiter.ar(In.ar(0,2), 0.97, 0.002)) }).add; ` +
-      `SynthDef(\\masterMeter, { SendReply.kr(Impulse.kr(15), '/meter', Amplitude.kr(In.ar(0,2))) }).add; ` +
+      // Measure the audio envelope before sampling for telemetry. Control-rate
+      // amplitude aliases held tones and can report a phase-dependent near-zero.
+      `SynthDef(\\masterMeter, { SendReply.kr(Impulse.kr(15), '/meter', Amplitude.ar(In.ar(0,2))) }).add; ` +
       `SynthDef(\\masterSpec, { var sig = In.ar(0,2).sum; var amps = [60,120,200,350,600,1000,1700,2800,4500,7000,11000,16000].collect { |f| Amplitude.kr(BPF.ar(sig, f, 0.5)) }; SendReply.kr(Impulse.kr(20), '/spec', amps); }).add; ` +
       `s.sync; ` +
       `Synth.tail(RootNode(s), \\masterLimiter); ` +
       `Synth.tail(RootNode(s), \\masterMeter); ` +
       `Synth.tail(RootNode(s), \\masterSpec); ` +
+      `~abxRecordBus = Bus.audio(s, 2); ~abxRecordTap = Synth.tail(RootNode(s), \\abxRecordTap, [\\bus, ~abxRecordBus.index]); ~abxPreviewGroup = Group.tail(RootNode(s)); ` +
       `OSCdef(\\meterfwd, {|msg| NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("MTR " ++ msg[3].round(0.001) ++ " " ++ msg[4].round(0.001)) }, '/meter'); ` +
       `OSCdef(\\specfwd, {|msg| NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("SPEC " ++ msg[3..].collect({|x| x.round(0.001)}).join(" ")) }, '/spec'); ` +
       // tap every Tidal event: forward its orbit (HIT, for slot flashing) AND the audio

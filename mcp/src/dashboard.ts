@@ -1,8 +1,9 @@
 import http from "node:http";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, createReadStream } from "node:fs";
 import path from "node:path";
 import { SETS_DIR, DIRT_SAMPLES_DIR, PROJECTS_DIR } from "./config.js";
 import type { CommandResult } from "./commands.js";
+import type { RecordingCatalog } from "./recordings.js";
 
 type CmdHandler = (body: unknown) => Promise<CommandResult>;
 
@@ -27,6 +28,7 @@ export function startDashboard(
   getState: () => unknown,
   getClock: () => unknown,
   onCmd: CmdHandler,
+  resources?: { sounds?: () => unknown; recordings?: RecordingCatalog; identity?: () => unknown; shutdown?: (session: string) => Promise<string> },
 ): http.Server {
   const server = http.createServer((req, res) => {
     // Apply security headers to every response.
@@ -43,6 +45,32 @@ export function startDashboard(
     // Vite's production bundle shares this service and the existing guarded API.
     // Only flat, generated asset names are accepted; never resolve request paths.
     const urlPath = (req.url || '/').split('?')[0];
+    if (req.method === "GET" && urlPath === "/runtime") {
+      res.writeHead(resources?.identity ? 200 : 404, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(resources?.identity?.() ?? null)); return;
+    }
+    if (req.method === "GET" && urlPath === "/sounds") {
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(resources?.sounds?.() ?? [])); return;
+    }
+    if (req.method === "GET" && urlPath === "/recordings") {
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify({ entries: resources?.recordings?.list() ?? [], warning: resources?.recordings?.warning ?? null })); return;
+    }
+    if (urlPath.startsWith("/recordings/")) {
+      const match = /^\/recordings\/([a-f0-9-]{36})\.wav$/.exec(urlPath);
+      try {
+        if (!match || !resources?.recordings || !["GET", "HEAD"].includes(req.method ?? "")) throw new Error("Recording not found");
+        const file = resources.recordings.retrieve(match[1]), size = statSync(file).size;
+        let start = 0, end = size - 1;
+        if (req.headers.range) {
+          const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
+          if (!range || +range[1] >= size || range[2] && +range[2] < +range[1]) { res.writeHead(416, { "content-range": `bytes */${size}` }); res.end(); return; }
+          start = +range[1]; if (range[2]) end = Math.min(+range[2], end);
+        }
+        res.writeHead(req.headers.range ? 206 : 200, { "content-type": "audio/wav", "content-length": end - start + 1, "accept-ranges": "bytes", "cache-control": "no-store", ...(req.headers.range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}), ...(req.url?.includes("download=1") ? { "content-disposition": `attachment; filename="jam-${match[1]}.wav"` } : {}) });
+        if (req.method === "HEAD") res.end();
+        else { const stream = createReadStream(file, { start, end }); stream.on("error", () => res.destroy()); res.on("close", () => stream.destroy()); stream.pipe(res); }
+      } catch (e) { res.writeHead(404, { "content-type": "text/plain" }); res.end(e instanceof Error ? e.message : "Recording unavailable"); }
+      return;
+    }
     if (urlPath === '/studio' || urlPath.startsWith('/studio/')) {
       const asset = /^\/studio\/assets\/([a-zA-Z0-9_-]+\.(?:js|css|woff2?|svg))$/.exec(urlPath);
       const index = urlPath === '/studio' || urlPath === '/studio/';
@@ -113,7 +141,7 @@ export function startDashboard(
       req.on("close", () => { clearInterval(tick); sseCount--; });
       return;
     }
-    if (req.method === "POST" && req.url && req.url.startsWith("/cmd")) {
+    if (req.method === "POST" && (urlPath === "/cmd" || urlPath === "/runtime/stop")) {
       // Enforce JSON body: reject non-JSON content types to prevent misuse.
       const ct = (req.headers["content-type"] ?? "").split(";")[0].trim();
       if (ct && ct !== "application/json") {
@@ -126,13 +154,17 @@ export function startDashboard(
       const origin = req.headers.origin;
       if (origin) {
         let ok = false;
-        try { const h = new URL(origin).hostname; ok = h === "127.0.0.1" || h === "localhost"; } catch { ok = false; }
+        try { ok = new URL(origin).host === req.headers.host; } catch { ok = false; }
         if (!ok) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "forbidden origin" })); return; }
       }
       let body = "";
       req.on("data", (c) => { body += c; if (body.length > 4 * 1024 * 1024) req.destroy(); });
       req.on("end", async () => {
         try {
+          if (urlPath === "/runtime/stop") {
+            if (!resources?.shutdown) throw new Error("Runtime control unavailable");
+            const message = await resources.shutdown(JSON.parse(body).sessionId); res.writeHead(200); res.end(message); return;
+          }
           const result = await onCmd(JSON.parse(body || "{}"));
           const status = result.ok ? 200 : result.code === "VALIDATION" ? 400 : ["STALE_SESSION", "STALE_PROJECT", "EXPIRED", "ID_CONFLICT"].includes(result.code) ? 409 : result.code === "BUSY" ? 503 : 500;
           res.writeHead(status, { "content-type": "application/json" });

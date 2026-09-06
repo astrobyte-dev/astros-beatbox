@@ -1,0 +1,41 @@
+{
+  "journey": {
+    "bytes": 482604,
+    "frames": 120640,
+    "sampleRate": 48000,
+    "channels": 2,
+    "duration": 2.513333333333333,
+    "peak": 8045,
+    "rms": 1311.0066924821263,
+    "sha256": "2ba375b0e7de36afb591319e806bffdbe8cc02db0d8f6e576cf94c4bddaddb7f"
+  },
+  "previewPhysical": {
+    "bytes": 215852,
+    "frames": 53952,
+    "sampleRate": 48000,
+    "channels": 2,
+    "duration": 1.124,
+    "peak": 21299,
+    "rms": 5588.364845219465,
+    "sha256": "77580a6e20d6d93a650b837e977060f6ddafa56c2ef5d7295c01b122982f4830"
+  },
+  "previewExcluded": {
+    "bytes": 193836,
+    "frames": 48448,
+    "sampleRate": 48000,
+    "channels": 2,
+    "duration": 1.0093333333333334,
+    "peak": 0,
+    "rms": 0,
+    "sha256": "a58622b236064a89540f31f5b027d6aceca05112195aafe6c3ddc6818d3c3630"
+  },
+  "auditionKeys": [
+    "bd/BT0A0A7.wav",
+    "sd/rytm-00-hard.wav",
+    "sd/rytm-01-classic.wav",
+    "bd/BT0A0A7.wav",
+    "sd/rytm-01-classic.wav",
+    "sd/rytm-00-hard.wav"
+  ],
+  "device": "System default"
+}

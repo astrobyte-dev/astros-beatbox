@@ -16,6 +16,8 @@ import {
 } from "./session";
 import { ClockStrip, EditableText, Icon, Range } from "./controls";
 import { TrackLane } from "./TrackLane";
+import { SoundLibrary } from "./SoundLibrary";
+import { Recordings } from "./Recordings";
 
 export function App() {
   const state = useProject(),
@@ -133,14 +135,25 @@ export function App() {
   const statusText = !connection.connected
     ? "Reconnecting"
     : connection.busy
-      ? connection.busy === "Play" && state.status !== "ready"
+      ? connection.busy === "Record"
+        ? state.recordingState?.state === "finalizing" ? "Finalizing recording…" : state.recordingState?.state === "recording" ? "Recording" : "Preparing recording…"
+        : connection.busy === "Play" && state.status !== "ready"
         ? "Preparing your instruments…"
         : `${connection.busy}…`
       : engineIssue ||
           state.status === "degraded" ||
+          state.status === "error" ||
           (!state.synchronized && state.status === "ready")
         ? "Playback needs attention"
-        : playing
+        : state.recordingState?.state === "finalizing"
+          ? "Finalizing recording..."
+          : state.recordingState?.state === "preparing"
+            ? "Preparing recording..."
+            : state.recording
+              ? "Recording"
+              : state.preview?.state === "previewing"
+                ? "Previewing"
+                : playing
           ? "Playing"
           : state.status === "idle"
             ? "Ready when you are"
@@ -217,11 +230,15 @@ export function App() {
           <Tempo project={p} disabled={disabled} />
           <button
             className={`record-button ${state.recording ? "recording" : ""}`}
-            disabled={disabled || state.status !== "ready"}
+            disabled={disabled || ["preparing", "finalizing"].includes(state.recordingState?.state ?? "") || !["ready", "idle"].includes(state.status)}
             aria-label={state.recording ? "Finish recording" : "Record"}
             aria-pressed={state.recording}
-            title="Record to the existing recordings folder"
-            onClick={() => void client.command({ cmd: "record" }, "Record")}
+            title="Record your jam; previews are excluded"
+            onClick={async () => {
+              const finishing = !!state.recordingState && state.recording;
+              const ok = await client.command(finishing ? { cmd: "record.stop", value: state.recordingState!.id } : { cmd: "record.start" }, "Record");
+              if (ok && finishing) setLibrary("Recordings");
+            }}
           >
             <i />
             {state.recording ? "Finish" : "Rec"}
@@ -269,6 +286,7 @@ export function App() {
               ["Grooves", "groove"],
               ["Sounds", "sound"],
               ["My Jams", "folder"],
+              ["Recordings", "sound"],
             ].map(([name, icon]) => (
               <button
                 key={name}
@@ -327,30 +345,9 @@ export function App() {
               )}
             </div>
           ) : library === "Sounds" ? (
-            <div className="library-content">
-              <span className="eyebrow">IN THIS JAM</span>
-              {p.assets.length ? (
-                <ul className="asset-list">
-                  {p.assets.map((a) => (
-                    <li key={a.id}>
-                      <Icon name="sound" />
-                      <span>
-                        {a.name}
-                        <small>
-                          {a.kind} · {a.index + 1}
-                        </small>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Your instruments’ sounds will appear here.</p>
-              )}
-              <p className="upcoming">
-                Sound browsing and previews are coming in a later update. For
-                now, explore the sounds in your jam.
-              </p>
-            </div>
+            <SoundLibrary track={track} />
+          ) : library === "Recordings" ? (
+            <Recordings />
           ) : (
             <div className="library-content">
               <span className="eyebrow">SAVED ON THIS COMPUTER</span>
@@ -506,7 +503,7 @@ export function App() {
                         clip={c}
                         sound={
                           a
-                            ? `${a.name}${a.index ? " · " + (a.index + 1) : ""} / ${a.kind === "sample" ? "drum sample" : a.kind}`
+                            ? `${a.name}${a.index ? " · " + (a.index + 1) : ""} / ${a.kind}`
                             : c
                               ? "Custom instrument"
                               : "No active rhythm"

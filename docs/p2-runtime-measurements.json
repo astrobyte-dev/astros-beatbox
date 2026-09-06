@@ -1,0 +1,16 @@
+{
+  "before": 0.236,
+  "disconnected": 0.234,
+  "reconnected": 0.208,
+  "generation": 0,
+  "recording": {
+    "bytes": 1155884,
+    "frames": 288960,
+    "sampleRate": 48000,
+    "channels": 2,
+    "duration": 6.02,
+    "peak": 8034,
+    "rms": 1370.2453442965013,
+    "sha256": "9a32c7b91af5e8d9db6682a34cff3b2fcb8d1488fba4b8ed22e32710d4bb39bf"
+  }
+}

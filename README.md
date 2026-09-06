@@ -12,7 +12,7 @@ A free musical playground for Windows. **Play with sound.** Start a groove, chan
 
 ![The new Astro's Beatbox studio](docs/p1-studio-1440.png)
 
-The new **P1 studio** lives at `/studio`. The screenshots below show the retained classic dashboard at `/`.
+The instrument studio lives at `/studio`. The screenshots below show the retained classic dashboard at `/`.
 
 ![Astro's Beatbox in action](docs/demo.gif)
 
@@ -29,7 +29,7 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 ## Features
 
 - **Studio:** named instruments, keyboard-accessible rhythm pads, painting, velocity, swing, contextual effects, independent mixing, generated code inspection, shared Undo/Redo, complete Save and My Jams.
-- **One curated starter:** Pocket groove, with kick, snare, hi-hat and clap. More library workflows belong to later phases.
+- **One curated starter:** Pocket groove, with kick, snare, hi-hat and clap. Browse and audition installed sound banks in Sounds, then Replace the selected visual instrument.
 - The following deeper tools remain available in the **classic dashboard**:
 - **Live layer cards** (`d1`–`d16`) — each shows its code, a plain-English explanation, per-layer knobs, and a **live waveform of that channel's own audio**
 - **Per-channel oscilloscope** — every card draws a real, phase-locked waveform tapped from its own voice; plus a master L/R meter and a **wavelength-coloured spectrum** (low freq red → high freq blue)
@@ -89,6 +89,7 @@ under `C:\Program Files\SuperCollider-*`, GHCup defaults to `C:\ghcup`, and Dirt
 | `TIDAL_DIRT_SAMPLES` | `%LOCALAPPDATA%\SuperCollider\downloaded-quarks\Dirt-Samples` | sample library |
 | `TIDAL_AUDIO_DEVICE` | OS default | startup audio device |
 | `TIDAL_DASH_PORT` | `3737` | dashboard port |
+| `TIDAL_RECORDINGS_DIR` | `recordings/` | application recording files and catalogue |
 
 ---
 
@@ -104,13 +105,17 @@ absolute path to `mcp/dist/server.js`. Then:
 4. For reliable audio, pick a **`Windows WASAPI : <your output>`** device from the 🔈 dropdown.
 
 For the new instrument experience, open **<http://127.0.0.1:3737/studio>**.
-Use **Start Pocket groove → Play → edit a pad → Undo → Save jam**. Reopen it from
-**My Jams**. Play prepares the engine if needed. Existing projects open as they are;
+Use **Start Pocket groove → Play → edit a pad → Sounds → Preview → Replace →
+Undo → Save jam**. Reopen it from **My Jams**, then **Record → Finish**. Completed
+takes appear in **Recordings**, with playback and Download WAV.
+Play prepares the engine if needed. Existing projects open as they are;
 the starter is offered only for an empty project. The built studio is served by the
 same application; no separate production frontend server is needed.
 
-See [the P1 architecture and validation report](docs/p1-studio.md) for scope,
-synchronization, accessibility and remaining limitations.
+See [the P2 implementation and validation report](docs/p2-creative-loop.md) for
+asset identity, preview routing, recording lifecycle, runtime ownership and the
+completed exit criteria, including real Windows audio and reconnect measurements.
+The [P1 report](docs/p1-studio.md) records the prior milestone.
 
 ### MCP tools
 `boot` · `eval_tidal` · `hush` · `eval_sc` · `status` · `project_status` ·
@@ -131,8 +136,13 @@ do { setcps (140/60/4)
    ; d4 $ note "<c2 af1 g1 bf1>" # s "supersaw" # cutoff 600 # legato 1 }
 ```
 
-Run the server in **one** client at a time. Occupied ports fail without evicting
-their owners; close the previous connection before reconnecting.
+The registered `mcp/dist/server.js` entry now connects to a persistent local
+runtime. Multiple MCP clients and browser tabs share it; closing a client keeps
+music and recording running. Use `npm run runtime:stop` in `mcp` to explicitly
+finalize an active take and release the owned engines. After backend changes,
+stop the runtime, rebuild, then reconnect. Incompatible services on occupied
+ports are never replaced. `TIDAL_DASH_PORT=0` explicitly selects an ephemeral
+instance for isolated tests; that instance closes with its MCP client.
 
 > 🔒 **Security:** live coding *is* arbitrary code execution — `eval_tidal`/`eval_sc` and the
 > dashboard's `/cmd` run whatever you send, and on Windows SuperCollider can touch the
@@ -173,5 +183,4 @@ audio or replaying an execution log. Press Play explicitly to resume. Missing
 samples remain identified and are silenced rather than substituted.
 
 Read [the P0b architecture, compatibility and validation report](docs/p0b-project-model.md)
-for the schema, edit API, recovery limits, routing and exit criteria. No P1 interface
-redevelopment is included.
+for the schema, edit API, recovery limits, routing and exit criteria. That report records the completed P0b milestone; the current `/studio` extends it.

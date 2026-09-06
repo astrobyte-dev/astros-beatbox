@@ -25,3 +25,4 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run selftest:browser
       - run: npm run selftest:studio
+      - run: npm run selftest:p2

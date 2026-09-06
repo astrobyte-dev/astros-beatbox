@@ -76,7 +76,7 @@ export const DEFAULT_AUDIO_DEVICE = process.env.TIDAL_AUDIO_DEVICE ?? "System de
 export const SETS_DIR = path.join(LIVECODING, "sets");
 export const PROJECTS_DIR = process.env.TIDAL_PROJECTS_DIR ?? path.join(LIVECODING, "projects");
 export const RECOVERY_DIR = process.env.TIDAL_RECOVERY_DIR ?? path.join(LIVECODING, ".abx-recovery");
-export const RECORDINGS_DIR = path.join(LIVECODING, "recordings");
+export const RECORDINGS_DIR = process.env.TIDAL_RECORDINGS_DIR ?? path.join(LIVECODING, "recordings");
 // Dirt-Samples quark (per-user). Uses %LOCALAPPDATA% so it isn't tied to one username.
 export const DIRT_SAMPLES_DIR = process.env.TIDAL_DIRT_SAMPLES
   ?? path.join(
