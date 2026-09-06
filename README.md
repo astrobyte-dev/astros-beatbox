@@ -97,7 +97,14 @@ absolute path to `mcp/dist/server.js`. Then:
 4. For reliable audio, pick a **`Windows WASAPI : <your output>`** device from the 🔈 dropdown.
 
 ### MCP tools
-`boot` · `eval_tidal {code}` · `hush` · `eval_sc {code}` · `status`
+`boot` · `eval_tidal` · `hush` · `eval_sc` · `status` · `project_status` ·
+`project_edit` · `project_undo` · `project_redo` · `project_save` · `project_load` ·
+`project_new` · `project_recover`
+
+For musical commands, read `status` and send `projectId: project.id` and
+`revision: project.revision`. Stale edits fail explicitly. `project_edit` accepts
+an `edits` array and a `label`; the whole batch is one undo intention shared with
+the dashboard. The console and legacy tool names remain available for raw Tidal.
 
 ```haskell
 -- example: paste into the dashboard console (or eval_tidal)
@@ -108,8 +115,8 @@ do { setcps (140/60/4)
    ; d4 $ note "<c2 af1 g1 bf1>" # s "supersaw" # cutoff 600 # legato 1 }
 ```
 
-> ⚠️ Run the server in **one** client at a time. (A newer instance now auto-clears a stale
-> one holding port 3737, so reconnects don't pile up.)
+Run the server in **one** client at a time. Occupied ports fail without evicting
+their owners; close the previous connection before reconnecting.
 
 > 🔒 **Security:** live coding *is* arbitrary code execution — `eval_tidal`/`eval_sc` and the
 > dashboard's `/cmd` run whatever you send, and on Windows SuperCollider can touch the
@@ -128,6 +135,27 @@ Dashboard and MCP commands now share validation and framed interpreter results.
 Stop keeps tracked patterns, tempo and mute/solo choices; Play resumes them. Explicit
 Tidal hush still clears patterns. Occupied ports fail safely without process takeover.
 
-Saving still uses the existing set format, not a complete session document. See
+See
 [the P0a command contract and validation notes](docs/p0a-command-boundary.md) for
 acknowledgement levels, retries, ownership, recovery limits and test commands.
+
+## Recoverable musical projects (P0b)
+
+The existing dashboard now edits a server-owned project. Use **Step grid → + Row**
+to create a visual track, enter its sound name and paint its pads. Mixer level and
+stereo balance act on a persistent audio channel; velocities and effects remain
+musical data. **Undo/Redo** includes browser and MCP project edits.
+
+**Save project/Open project** uses versioned `projects/*.abx.json` files containing
+all tracks, clips, scenes, automation, arrangement, assets and dependencies.
+**Export/Import .tidal** remains a separate source workflow. Imported code stays
+opaque; rhythm/effect controls require visual clips rather than rewriting code.
+
+Every acknowledged musical edit writes a checksummed recovery checkpoint under
+`.abx-recovery/`. Restart restores the authored document stopped, without booting
+audio or replaying an execution log. Press Play explicitly to resume. Missing
+samples remain identified and are silenced rather than substituted.
+
+Read [the P0b architecture, compatibility and validation report](docs/p0b-project-model.md)
+for the schema, edit API, recovery limits, routing and exit criteria. No P1 interface
+redevelopment is included.

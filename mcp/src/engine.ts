@@ -3,6 +3,7 @@ import type { DriverFault } from "./proc.js";
 import { existsSync, readFileSync } from "node:fs";
 import { Sclang } from "./sclang.js";
 import { Tidal } from "./tidal.js";
+import { CHANNEL_SYNTH } from "./project-compiler.js";
 import { METER_UDP_PORT, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE, SCOPE_ENABLED, SCOPE_RMS_HZ, SCOPE_WAVE_N, SCOPE_WAVE_MS } from "./config.js";
 
 // Never take over another server. Only probe availability; do not identify or kill
@@ -77,6 +78,8 @@ export class Engine {
         // GHCi can continue to a later prompt after a boot-file error. Force the
         // actual stream binding before declaring the interpreter usable.
         await td.eval("do { _ <- Control.Exception.evaluate tidal; pure () }", "boot-tidal"); check();
+        await td.eval("setcps (120/60/4)", "boot-tempo"); check();
+        await this.installChannels(); check();
         await this.installMaster(); check();
         await this.installScope(); check();
         await this.queryDevices(); check();
@@ -94,6 +97,10 @@ export class Engine {
 
   // Master safety limiter + a master level meter that forwards L/R to the
   // dashboard over UDP. Both sit at the root tail (after all SuperDirt orbits).
+  private async installChannels(): Promise<void> {
+    await this.sclang.evalRoutine(CHANNEL_SYNTH + ` s.sync; ~abxBuses = Array.fill(12, { Bus.audio(s, 2) }); ~dirt.orbits.do { |o, i| o.outBus = ~abxBuses[i].index }; s.sync; ~abxChannels = ~abxBuses.collect { |b| Synth.tail(RootNode(s), \\abxChannel, [\\inBus, b.index]) }; s.sync;`, "install-channels", 15000);
+  }
+
   private async installMaster(): Promise<void> {
     const code =
       `SynthDef(\\masterLimiter, { ReplaceOut.ar(0, Limiter.ar(In.ar(0,2), 0.97, 0.002)) }).add; ` +

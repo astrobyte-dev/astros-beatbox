@@ -152,7 +152,7 @@
   #consoleIn:focus{outline:none;border-color:var(--green);box-shadow:0 0 8px rgba(0,255,94,.2);}
   /* ---- mixer drawer (bottom, collapsible; CSS height transition = no re-render) ---- */
   #mixwrap{max-height:0;overflow:hidden;transition:max-height .22s ease;background:rgba(4,10,6,.92);}
-  #mixwrap.open{max-height:440px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  #mixwrap.open{max-height:440px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:90px;}
   .mixbar{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);}
   .mixbar .seqlabel{color:var(--green);font-size:11px;letter-spacing:.6px;text-transform:uppercase;}
   #mixrows{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;}
@@ -204,8 +204,10 @@
 <div id="loopbar"><div id="loopfill"></div></div>
 <div id="specwrap"><canvas id="spectrum"></canvas></div>
 <div id="deck">
-  <div class="deckgroup"><input type="text" id="setName" placeholder="set name"><button data-act="save">&#128190; Save</button></div>
-  <div class="deckgroup"><select id="setSelect"><option value="">— saved sets —</option></select><button data-act="load">&#128193; Load</button></div>
+  <div class="deckgroup"><input type="text" id="projectName" placeholder="project name"><button data-project="save">&#128190; Save project</button><select id="projectSelect"></select><button data-project="load">Open project</button></div>
+  <div class="deckgroup"><button id="undoBtn" data-project="undo">Undo</button><button id="redoBtn" data-project="redo">Redo</button><button data-project="new">New project</button><span id="projectState"></span><span id="missingAssets"></span></div>
+  <div class="deckgroup"><input type="text" id="setName" placeholder="Tidal export name"><button data-act="save">Export .tidal</button></div>
+  <div class="deckgroup"><select id="setSelect"><option value="">— Tidal source files —</option></select><button data-act="load">Import .tidal</button></div>
   <span class="sep"></span>
   <button data-act="setloop" title="freeze the live beat into one LOOP channel so you can build on top">&#10227; Set Loop</button>
   <span class="sep"></span>
@@ -273,6 +275,7 @@
 </div>
 <script src="dashboard-dsp.js"></script>
 <script src="dashboard.js"></script>
+<script src="dashboard-project.js"></script>
 <script src="dashboard-scope.js"></script>
 <script src="dashboard-cheats.js"></script>
 <script src="dashboard-curves.js"></script>

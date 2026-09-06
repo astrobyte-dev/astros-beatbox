@@ -39,6 +39,16 @@ sets/*.tidal               saved jams
   save/load, non-silent WAV recording, retries, timeout quarantine and Reset. It uses
   a temporary directory and refuses occupied ports.
 - Read [the P0a command contract](docs/p0a-command-boundary.md) before changing acknowledgements or lifecycle code.
+- **P0b audio regression:** `npm run selftest:p0b` verifies the compiler, arrangement,
+  persistent channel stage, sustained stereo audio, level, balance, mute/solo, route
+  isolation, complete save/reopen and undo/redo using owned Windows engines.
+- **Existing dashboard browser test:** run `npx playwright install chromium`, then
+  `npm run selftest:browser`. This runs real Chromium pointer gestures against the
+  real project service with a fake audio engine. `ABX_CHROMIUM` can select an existing
+  Chromium executable. It writes `docs/p0b-dashboard-validation.png`.
+- Read [the P0b project contract](docs/p0b-project-model.md) before adding musical
+  state or editing controls. Browser caches and telemetry must not become authored
+  state. Complete saves use `.abx.json`; `.tidal` files remain source artifacts.
 
 ## Gotchas worth knowing
 

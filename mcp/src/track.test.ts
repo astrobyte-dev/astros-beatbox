@@ -6,6 +6,17 @@ function fresh(): RigState {
   return { slots: {}, tempoBpm: 0, muted: new Set(), solo: null };
 }
 
+test("opaque Tidal keeps quoted semicolons and nested expressions intact", () => {
+  const r = fresh();
+  track(r, 'do { d1 $ s "bd;cp"; d2 $ (let { a = s "hh"; b = a } in b) }');
+  assert.equal(r.slots.d1, 's "bd;cp"'); assert.equal(r.slots.d2, '(let { a = s "hh"; b = a } in b)');
+  track(r, 'putStrLn "setcps 99"'); assert.equal(r.tempoBpm, 0);
+});
+
+test("explicit Tidal tempo respects the project beats-per-cycle", () => {
+  const r = fresh(); r.beatsPerCycle = 7; track(r, "setcps (140/60/7)"); assert.equal(r.tempoBpm, 140);
+});
+
 test("track stores a slot body without the 'dN $' prefix", () => {
   const r = fresh();
   track(r, 'd1 $ s "bd*4" # gain 1.1');

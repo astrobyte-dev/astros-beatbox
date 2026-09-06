@@ -9,14 +9,17 @@
     "test": "npm run build && node run-tests.mjs",
     "selftest": "node dist/selftest.js",
     "start": "node dist/server.js",
-    "selftest:p0a": "npm run build && node dist/p0a-selftest.js"
+    "selftest:p0a": "npm run build && node dist/p0a-selftest.js",
+    "selftest:p0b": "npm run build && node dist/p0b-selftest.js",
+    "selftest:browser": "npm run build && node browser-selftest.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "@types/node": "^22.9.0"
+    "@types/node": "^22.9.0",
+    "playwright": "^1.61.1",
+    "typescript": "^5.6.3"
   }
 }

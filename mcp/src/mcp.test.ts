@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 test("existing MCP launch exposes shared validation, session IDs and isError failures without booting audio", { timeout: 15000 }, async () => {
   const transport = new StdioClientTransport({
@@ -12,7 +15,8 @@ test("existing MCP launch exposes shared validation, session IDs and isError fai
   const client = new Client({ name: "p0a-test", version: "1" });
   try {
     await client.connect(transport);
-    const listed = await client.listTools(); assert.deepEqual(listed.tools.map((t) => t.name).sort(), ["boot", "eval_sc", "eval_tidal", "hush", "status"]);
+    const listed = await client.listTools(); assert.deepEqual(listed.tools.map((t) => t.name).filter(n => !n.startsWith("project_")).sort(), ["boot", "eval_sc", "eval_tidal", "hush", "status"]);
+    assert.ok(listed.tools.some(t => t.name === "project_edit"));
     const status = await client.callTool({ name: "status", arguments: {} });
     const state = JSON.parse((status.content as { text: string }[])[0].text);
     assert.equal(state.state, "idle"); assert.equal(state.synchronized, true); assert.ok(state.sessionId);
@@ -23,4 +27,26 @@ test("existing MCP launch exposes shared validation, session IDs and isError fai
     const after = await client.callTool({ name: "status", arguments: {} });
     assert.equal(JSON.parse((after.content as { text: string }[])[0].text).state, "idle");
   } finally { await client.close(); }
+});
+
+test("real MCP batches and HTTP edits share project revisions, history and persistence", { timeout: 15000 }, async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "abx-mcp-project-"));
+  const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL("server.js", import.meta.url))], env: { ...process.env as Record<string, string>, TIDAL_DASH_PORT: "0", TIDAL_METER_PORT: "0", TIDAL_PROJECTS_DIR: dir, TIDAL_RECOVERY_DIR: path.join(dir, "recovery") }, stderr: "pipe" });
+  const client = new Client({ name: "p0b-test", version: "1" });
+  const call = async (name: string, args = {}) => { const r = await client.callTool({ name, arguments: args }); return { result: JSON.parse((r.content as { text: string }[])[0].text), isError: r.isError }; };
+  try {
+    await client.connect(transport); const { result: initial } = await call("status");
+    const meta = { projectId: initial.project.id, revision: initial.project.revision };
+    const batch = await call("project_edit", { ...meta, label: "MCP intention", edits: [{ type: "project.rename", name: "Complete" }, { type: "tempo.set", bpm: 137, beatsPerCycle: 7 }] });
+    assert.equal(batch.isError, false); assert.equal(batch.result.history.undo, 1);
+    const stale = await call("project_edit", { ...meta, label: "Stale", edits: [{ type: "project.rename", name: "Wrong" }] }); assert.equal(stale.isError, true); assert.equal(stale.result.code, "STALE_PROJECT");
+    const res = await fetch(initial.dashboard + "/cmd", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cmd: "project.undo", projectId: meta.projectId, revision: batch.result.revision }) });
+    assert.equal(res.status, 200); const undone = await res.json() as { revision: number };
+    const { result: current } = await call("project_status"); assert.equal(current.project.name, "Untitled"); assert.equal(current.history.redo, 1);
+    const redo = await call("project_redo", { projectId: meta.projectId, revision: undone.revision }); assert.equal(redo.isError, false);
+    const saved = await call("project_save", { projectId: meta.projectId, revision: redo.result.revision, name: "roundtrip" }); assert.equal(saved.isError, false);
+    const { result: after } = await call("status"); assert.equal(after.state, "idle"); assert.equal(after.project.tempo.beatsPerCycle, 7);
+    const changed = await call("project_new", { projectId: after.project.id, revision: after.project.revision }); assert.equal(changed.isError, false);
+    const wrongProject = await call("project_undo", { projectId: after.project.id, revision: after.project.revision }); assert.equal(wrongProject.result.code, "STALE_PROJECT");
+  } finally { await client.close(); rmSync(dir, { recursive: true, force: true }); }
 });

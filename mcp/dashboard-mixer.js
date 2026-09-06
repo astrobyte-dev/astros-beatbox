@@ -60,12 +60,15 @@
     var room = active ? Abx.fnum(code, "room") : null;   if (room == null) room = 0;
     var dly  = active ? Abx.fnum(code, "delay"): null;   if (dly == null)  dly = 0;
     var dis = active ? "" : " disabled";   // ghost strips render the layout but their controls are inert
+    var t=window.AbxProject&&AbxProject.track(slot),c=t&&AbxProject.clip(t);
+    if(t){gain=t.mixer.level;pan=(t.mixer.balance+1)/2;solo=t.mixer.solo;room=AbxProject.value(slot,'room',0);dly=AbxProject.value(slot,'delay',0);if(t.channel===null)dis=' disabled';}
+    var fxdis=t&&(!c||c.kind!=='steps')?' disabled':dis;
     return '<div class="strip' + (active ? "" : " empty") + (muted ? " muted" : "") + (solo ? " solo" : "") + '" data-slot="' + slot + '" style="--rc:' + col + '">'
       + '<div class="striphd"><span class="slot" style="color:' + col + '">' + slot + '</span><span class="lbl">' + Abx.esc(labelFor(code)) + '</span></div>'
       + '<canvas class="mixscope" data-slot="' + slot + '" height="40"></canvas>'
       + '<div class="sends">'
-        + '<label class="send">FX1<input type="range" class="fx1" data-slot="' + slot + '" min="0" max="1" step="0.02" value="' + room + '"' + dis + ' title="reverb send (room)"></label>'
-        + '<label class="send">FX2<input type="range" class="fx2" data-slot="' + slot + '" min="0" max="1" step="0.02" value="' + dly + '"' + dis + ' title="delay send"></label>'
+        + '<label class="send">FX1<input type="range" class="fx1" data-slot="' + slot + '" min="0" max="1" step="0.02" value="' + room + '"' + fxdis + ' title="reverb send (room)"></label>'
+        + '<label class="send">FX2<input type="range" class="fx2" data-slot="' + slot + '" min="0" max="1" step="0.02" value="' + dly + '"' + fxdis + ' title="delay send"></label>'
       + '</div>'
       + '<div class="panrow"><input type="range" class="pan" data-slot="' + slot + '" min="0" max="1" step="0.02" value="' + panPositionToString(pan) + '"' + dis + ' title="pan (0.5 = centre)"></div>'
       + '<div class="fadarea"><span class="vmeter"><i></i></span>'
@@ -92,7 +95,7 @@
   // write a param via the same cmd:set path the card knobs use; ghost strips have nothing to write to.
   function setParam(slot, param, value){
     if (!((Abx.state().slots || {})[slot])) return;
-    Abx.send({ cmd: "set", slot: slot, param: param, value: value });
+    if(window.AbxProject)AbxProject.setParam(slot,param,value);
   }
   // delegates (mirror the AbxSeq/AbxCurves contract). M/S go through the core data-cmd dispatcher
   // (shared with the cards), so mute/solo stay in sync both ways for free.
@@ -112,7 +115,7 @@
   function maybeRerender(){
     if (!isOpen()) return;
     var st = Abx.state();
-    var sig = JSON.stringify({ s: Object.keys(st.slots || {}), m: st.muted, so: st.solo });
+    var sig = JSON.stringify({ s: Object.keys(st.slots || {}), m: st.muted, so: st.solo, r:st.project&&st.project.revision });
     if (sig !== lastSig) { lastSig = sig; render(); }
   }
   // animate meters + mini-scopes while the drawer is open (reuses AbxScope.draw; own rAF, idle when shut)

@@ -132,14 +132,25 @@
     out.className=j.ok===true?"ok":"err";
   }
   var commandQueue=Promise.resolve(),stopRequested=false;
+  var localRevisions={};
   function send(o){
     var request=Object.assign({},o,{operationId:crypto.randomUUID(),sessionId:cur.sessionId,issuedAt:Date.now()});
-    var result=commandQueue.then(function(){ return fetch("/cmd",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(request)})
+    if(cur.project && request.projectId===undefined&&['boot','stop','pause','record','reset','setdevice'].indexOf(o.cmd)<0){request.projectId=cur.project.id;request.revision=cur.project.revision;}
+    var result=commandQueue.then(function(){
+      // Only follow revisions acknowledged from this queue, never an external edit.
+      var seen={}; while(request.projectId&&localRevisions[request.projectId+':'+request.revision]!==undefined&&!seen[request.revision]){seen[request.revision]=true;request.revision=localRevisions[request.projectId+':'+request.revision];}
+      return fetch("/cmd",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(request)})
       .then(function(r){return r.json();})
       .then(function(j){
         if(!j||typeof j.ok!=="boolean") throw new Error("Invalid command response");
-        if(j.ok!==true||["boot","stop","pause","resume","record","save","load","reset","setdevice"].indexOf(o.cmd)>=0) reportCommand(j);
-        poll(); return j;
+        if(j.ok&&j.projectId){
+          if(['project.load','project.new','project.recover','load'].indexOf(o.cmd)>=0)localRevisions={};
+          else if(j.projectId===request.projectId&&j.revision>request.revision)localRevisions[request.projectId+':'+request.revision]=j.revision;
+          if(j.project)cur.project=j.project;cur.history=j.history;
+          if(window.AbxProject)AbxProject.render();
+        }
+        if(j.ok!==true||["boot","stop","pause","resume","record","save","load","reset","setdevice","project.save","project.load","project.new","project.undo","project.redo","song.start","song.stop"].indexOf(o.cmd)>=0) reportCommand(j);
+        return poll().then(function(){return j;});
       }).catch(function(e){
         var j={ok:false,error:"Connection failed; command outcome unknown. Check engine state before trying again. "+e.message,operationId:request.operationId};
         reportCommand(j); return j;
@@ -152,7 +163,7 @@
       // Flush already-painted edits before Stop so a delayed edit cannot restart it.
       if(window.AbxSeq)AbxSeq.beforeStop();
       if(window.AbxCurves)AbxCurves.beforeStop();
-      for(var key in pending){ var x=pending[key]; send({cmd:"set",slot:x.slot,param:x.param,value:x.value}); } pending={};
+      flushControls();
       return send({cmd:c,slot:slot}).then(function(j){ return poll().then(function(){ stopRequested=false; return j; }); });
     }
     return send({cmd:c,slot:slot});
@@ -161,13 +172,17 @@
   // reaching for bare globals). state() returns the live polled state; the clock wrapper is one
   // line over AbxDsp so the phase math stays pure + unit-tested. ----
   window.Abx={ state:function(){return cur;}, send:send, cmd:cmd, poll:poll,
+    report:reportCommand,
+    stopping:function(){return stopRequested;},
     color:{chan:chanColor, chanA:chanColorA, wlRGB:wlRGB}, esc:esc, fnum:fnum,
     clock:{ phase:function(){ return AbxDsp.audioPhase(clk, performance.now()); } } };
   // mixer: "all off" mutes every layer individually (so each card stays toggleable),
   // "all on" unmutes everything. Per-layer M buttons / keys 1-9 flip one at a time.
   function allMuted(){ var ks=Object.keys(cur.slots||{}); return ks.length>0 && ks.every(function(k){return (cur.muted||[]).indexOf(k)>=0;}); }
   function toggleAll(){ var ks=Object.keys(cur.slots||{}); if(!ks.length)return;
-    if(cur.stopped||cur.paused||allMuted()){ send({cmd:"resume"}); } else { ks.forEach(function(k){ send({cmd:"mute",slot:k}); }); }
+    if(cur.stopped||cur.paused){send({cmd:'resume'});}
+    else if(window.AbxProject&&cur.project){var mute=!allMuted();AbxProject.edit(cur.project.tracks.filter(function(t){return t.activeClipId;}).map(function(t){return {type:'mixer.set',trackId:t.id,values:{mute:mute}};}),mute?'Mute all':'Unmute all');}
+    else if(allMuted()){ send({cmd:"resume"}); } else { ks.forEach(function(k){ send({cmd:"mute",slot:k}); }); }
     setTimeout(poll,140); }
   function transport(){ if(cur.status==="error"||cur.status==="disconnected")return"unconfirmed"; if(cur.stopped)return"stopped"; if(cur.synchronized===false)return"unconfirmed"; if(Object.keys(cur.slots).length===0)return"stopped"; return cur.paused||allMuted()?"paused":"playing"; }
 
@@ -229,8 +244,10 @@
       pending[el.dataset.slot+"|"+el.dataset.param]={slot:el.dataset.slot,param:el.dataset.param,value:+el.value}; }
   });
   var lastInput=0,pending={},pendingTempo=null;
-  setInterval(function(){ for(var key in pending){ var x=pending[key]; delete pending[key]; send({cmd:"set",slot:x.slot,param:x.param,value:x.value}); }
-    if(pendingTempo!=null){ send({cmd:"tempo",value:pendingTempo}); pendingTempo=null; }
+  function flushControls(){ for(var key in pending){ var x=pending[key]; delete pending[key]; if(window.AbxProject)AbxProject.setParam(x.slot,x.param,x.value);else send({cmd:"set",slot:x.slot,param:x.param,value:x.value}); }
+    if(pendingTempo!=null){ if(window.AbxProject&&cur.project)AbxProject.edit([{type:'tempo.set',bpm:pendingTempo,beatsPerCycle:cur.project.tempo.beatsPerCycle}],'Tempo');else send({cmd:"tempo",value:pendingTempo}); pendingTempo=null; }
+  }
+  setInterval(function(){ flushControls();
     if(window.AbxSeq) AbxSeq.flushPending(); },80);
 
   document.addEventListener("click",function(e){
@@ -318,6 +335,9 @@
 
   var lastSig="",lastFault="";
   function render(st){ cur=st;
+    if(window.AbxProject)AbxProject.render();
+    if(window.AbxSeq&&AbxSeq.sync)AbxSeq.sync();
+    if(window.AbxCurves&&AbxCurves.sync)AbxCurves.sync();
     var fault=st.sessionId+":"+st.faultVersion+":"+st.error;
     if(st.error&&fault!==lastFault){ reportCommand({ok:false,error:st.error}); lastFault=fault; }
     document.getElementById("engdot").className="dot "+(st.status||"");
@@ -330,16 +350,18 @@
     var rb=document.getElementById("recBtn"); rb.classList.toggle("on",!!st.recording); rb.innerHTML=st.recording?"&#9632; Rec":"&#9679; Rec";
     updateAudio(st);
     if(Date.now()-(st.meterAge||0)<450){ tgtL=Math.max(tgtL,st.meterL||0); tgtR=Math.max(tgtR,st.meterR||0); }
-    var sig=JSON.stringify({s:st.slots,m:st.muted,so:st.solo,p:st.paused,stopped:st.stopped});
+    var sig=JSON.stringify({s:st.slots,m:st.muted,so:st.solo,p:st.paused,stopped:st.stopped,revision:st.project&&st.project.revision});
     if(sig===lastSig||dragging) return; lastSig=sig;
-    var muted=st.muted||[],solo=st.solo,keys=Object.keys(st.slots||{}).sort(function(a,b){return parseInt(a.slice(1))-parseInt(b.slice(1));});
+    var muted=st.muted||[],solo=st.solo,soloSlots=st.project?st.project.tracks.filter(function(t){return t.mixer.solo;}).map(function(t){return 'd'+t.slot;}):solo?[solo]:[],keys=Object.keys(st.slots||{}).sort(function(a,b){return parseInt(a.slice(1))-parseInt(b.slice(1));});
     var grid=document.getElementById("grid");
     if(keys.length===0){ grid.innerHTML='<div class="empty">no patterns playing &mdash; <b>type a beat below</b> or hit Surprise me</div>'; return; }
     var loopNames={}; keys.filter(function(k){return /^\s*stack\s*\[/.test(st.slots[k]);}).sort(function(a,b){return parseInt(b.slice(1))-parseInt(a.slice(1));}).forEach(function(k,ix){ loopNames[k]="LOOP_"+(ix+1); });
     var h="";
-    for(var i=0;i<keys.length;i++){ var k=keys[i],isM=muted.indexOf(k)>=0,isS=(solo===k),dim=st.stopped||st.paused||(solo&&!isS)||isM,c=st.slots[k],isLoop=!!loopNames[k],knobs="";
+    for(var i=0;i<keys.length;i++){ var k=keys[i],isM=muted.indexOf(k)>=0,isS=soloSlots.indexOf(k)>=0,dim=st.stopped||st.paused||(soloSlots.length&&!isS)||isM,c=st.slots[k],isLoop=!!loopNames[k],knobs="";
       if(!isLoop) for(var j=0;j<KNOBS.length;j++){ var kn=KNOBS[j],val=fnum(c,kn.p); if(val==null)val=kn.def;
-        knobs+='<div class="knob"><span>'+kn.l+'</span><input type="range" min="'+kn.min+'" max="'+kn.max+'" step="'+kn.step+'" value="'+val+'" data-slot="'+k+'" data-param="'+kn.p+'"><b id="v-'+k+'-'+kn.p+'">'+val+'</b></div>'; }
+        var pt=window.AbxProject&&AbxProject.track(k),pc=pt&&AbxProject.clip(pt);if(pt)val=AbxProject.value(k,kn.p,kn.def);
+        var disabled=pt&&((kn.p==='gain'||kn.p==='pan')?pt.channel===null:!pc||pc.kind!=='steps');
+        knobs+='<div class="knob"><span>'+kn.l+'</span><input type="range"'+(disabled?' disabled title="Raw code: edit in console"':'')+' min="'+kn.min+'" max="'+kn.max+'" step="'+kn.step+'" value="'+val+'" data-slot="'+k+'" data-param="'+kn.p+'"><b id="v-'+k+'-'+kn.p+'">'+val+'</b></div>'; }
       h+='<div class="card'+(isM?" muted":"")+(isS?" solo":"")+(isLoop?" loop":"")+'">'
        + '<div class="crow"><span class="live'+(dim?" off":"")+'" id="dot-'+k+'"></span><span class="slot">'+(isLoop?"&#128274; "+loopNames[k]:k)+'</span>'
        + (isM?'<span class="tag">muted</span>':'')+(isS?'<span class="tag" style="color:var(--green);border-color:var(--green)">solo</span>':'')

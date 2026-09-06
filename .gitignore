@@ -9,9 +9,14 @@ render/
 
 # machine-specific / runtime
 audio_device.txt
+.abx-recovery/
+projects/
 *.log
 sc_fc.log
 tidal_fc.log
+
+# disposable browser failure output (validation evidence is kept in docs)
+/docs/p0b-dashboard-failure.png
 
 # editor / OS
 .vscode/

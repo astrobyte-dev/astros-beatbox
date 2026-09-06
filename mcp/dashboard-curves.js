@@ -5,23 +5,23 @@
   var send=Abx.send, poll=Abx.poll, chanColor=Abx.color.chan, chanColorA=Abx.color.chanA;   // shared core surface
 
   // ---- per-channel modulation curves: draw a curve, it drives a param over N bars ----
-  var CURVEPARAMS={cutoff:{lo:150,hi:9000,fmt:function(v){return Math.round(v);}},
-    gain:{lo:0,hi:1.5,fmt:function(v){return v.toFixed(2);}},
+  var CURVEPARAMS={cutoff:{lo:0,hi:24000,fmt:function(v){return Math.round(v);}},
+    gain:{lo:0,hi:2,fmt:function(v){return v.toFixed(2);}},
     pan:{lo:0,hi:1,fmt:function(v){return v.toFixed(2);}},
-    speed:{lo:0.25,hi:2,fmt:function(v){return v.toFixed(2);}},
-    shape:{lo:0,hi:0.85,fmt:function(v){return v.toFixed(2);}},
+    speed:{lo:-8,hi:8,fmt:function(v){return v.toFixed(2);}},
+    shape:{lo:0,hi:1,fmt:function(v){return v.toFixed(2);}},
     room:{lo:0,hi:1,fmt:function(v){return v.toFixed(2);}}};
-  var CURVEN=16, curves={}, curveT={}, painting=null, lastCurveKeys="";
-  function curveOf(dn){ if(!curves[dn]) curves[dn]={param:"cutoff",bars:1,on:false,vals:new Array(CURVEN).fill(0.5)}; return curves[dn]; }
-  function stripParam(code,p){ return code.replace(new RegExp('#\\s*'+p+'\\s+(\\([^)]*\\)|"[^"]*"|[^#]+)','g'),'').replace(/\s+/g,' ').trim(); }
-  function applyCurve(dn){ var c=curves[dn]; if(!c)return; var base=Abx.state().slots[dn]; if(!base)return;
-    var stripped=stripParam(base,c.param);
-    if(!c.on){ send({cmd:"eval",value:dn+" $ "+stripped}); setTimeout(poll,170); return; }
-    var pr=CURVEPARAMS[c.param]; var str=c.vals.map(function(v){return pr.fmt(pr.lo+v*(pr.hi-pr.lo));}).join(" ");
-    var term=c.bars>1?'(slow '+c.bars+' "'+str+'")':'"'+str+'"';
-    send({cmd:"eval",value:dn+" $ "+stripped+" # "+c.param+" "+term}); setTimeout(poll,170); }
-  function applyCurveD(dn,ms){ clearTimeout(curveT[dn]); curveT[dn]=setTimeout(function(){delete curveT[dn]; applyCurve(dn);},ms||130); }
-  function beforeStop(){ for(var dn in curveT){ clearTimeout(curveT[dn]); applyCurve(dn); } curveT={}; }
+  var CURVEN=16, curves={}, curveT={}, painting=null, lastCurveKeys="",signature="",draftBase=null;
+  function curveOf(dn){ if(!curves[dn]) curves[dn]={id:crypto.randomUUID(),param:"cutoff",bars:1,on:false,vals:new Array(CURVEN).fill(0.5)}; return curves[dn]; }
+  function begin(){if(!draftBase){var p=AbxProject.project();draftBase={id:p.id,revision:p.revision};}}
+  function sync(){if(painting||draftBase||!AbxProject.project())return;var p=AbxProject.project(),s=p.id+':'+p.revision;if(s===signature)return;signature=s;curves={};
+    p.tracks.forEach(function(t){var clip=AbxProject.clip(t);if(!clip||clip.kind!=='steps')return;var a=p.automation.find(function(a){return a.trackId===t.id&&a.clipId===clip.id;});if(a)curves['d'+t.slot]={id:a.id,param:a.parameter,bars:a.bars,on:a.enabled,vals:a.values.slice()};});
+    if(document.getElementById('curvewrap').style.display==='block')curveRender();}
+  function applyCurve(dn){var c=curves[dn],t=AbxProject.track(dn),clip=AbxProject.clip(t);if(!c||!clip||clip.kind!=='steps')return;
+    clearTimeout(curveT[dn]);delete curveT[dn];var base=draftBase;draftBase=null;
+    return AbxProject.edit([{type:'automation.put',automation:{id:c.id,trackId:t.id,clipId:clip.id,parameter:c.param,bars:c.bars,enabled:c.on,values:c.vals.slice()}}],'Draw '+c.param,undefined,base).then(function(){signature='';sync();});}
+  function applyCurveD(dn,ms){begin();clearTimeout(curveT[dn]);curveT[dn]=setTimeout(function(){delete curveT[dn];if(!painting)applyCurve(dn);},ms||130);}
+  function beforeStop(){if(painting){var dn=painting.dn;painting=null;applyCurve(dn);}for(var key in curveT){clearTimeout(curveT[key]);applyCurve(key);}curveT={};}
   function drawCurve(cv){ var dn=cv.dataset.dn,c=curves[dn]; if(!c)return;
     var W=cv.clientWidth||600; if(cv.width!==W)cv.width=W; var H=cv.height,ctx=cv.getContext("2d"),n=c.vals.length,bw=W/n;
     ctx.clearRect(0,0,W,H);
@@ -31,7 +31,7 @@
     ctx.strokeStyle=c.on?chanColor(dn):"#5f9d72"; ctx.lineWidth=2; ctx.beginPath();
     for(var j=0;j<n;j++){ var x=j*bw+bw/2,yy=H-c.vals[j]*H; if(j===0)ctx.moveTo(x,yy); else ctx.lineTo(x,yy); } ctx.stroke(); }
   function curveRender(){ var list=document.getElementById("curvelist");
-    var keys=Object.keys(Abx.state().slots||{}).sort(function(a,b){return parseInt(a.slice(1))-parseInt(b.slice(1));});
+    var keys=AbxProject.project().tracks.filter(function(t){var c=AbxProject.clip(t);return c&&c.kind==='steps';}).map(function(t){return 'd'+t.slot;});
     lastCurveKeys=keys.join(",");
     if(!keys.length){ list.innerHTML='<div class="seqhint" style="padding:8px 0">no layers yet — make a beat first, then draw curves to modulate it.</div>'; return; }
     var pnames=["cutoff","gain","pan","speed","shape","room"],h="";
@@ -68,15 +68,14 @@
   // delegates called by dashboard.js's single click/change dispatchers + render loop
   function handleClick(b){
     if(b.dataset.act==="curves"){ openCurves(); return true; }
-    if(b.dataset.curve==="toggle"){ var cd=curveOf(b.dataset.dn); cd.on=!cd.on; b.classList.toggle("on",cd.on); b.textContent=cd.on?"ON":"OFF"; var cvt=document.querySelector('.curvecv[data-dn="'+b.dataset.dn+'"]'); if(cvt)drawCurve(cvt); applyCurve(b.dataset.dn); return true; }
-    if(b.dataset.curve==="preset"){ curvePreset(b.dataset.dn,b.dataset.shape); var cvp=document.querySelector('.curvecv[data-dn="'+b.dataset.dn+'"]'); if(cvp)drawCurve(cvp); applyCurveD(b.dataset.dn); return true; }
+    if(b.dataset.curve==="toggle"){begin(); var cd=curveOf(b.dataset.dn); cd.on=!cd.on; b.classList.toggle("on",cd.on); b.textContent=cd.on?"ON":"OFF"; var cvt=document.querySelector('.curvecv[data-dn="'+b.dataset.dn+'"]'); if(cvt)drawCurve(cvt); applyCurve(b.dataset.dn); return true; }
+    if(b.dataset.curve==="preset"){begin(); curvePreset(b.dataset.dn,b.dataset.shape); var cvp=document.querySelector('.curvecv[data-dn="'+b.dataset.dn+'"]'); if(cvp)drawCurve(cvp); applyCurveD(b.dataset.dn); return true; }
     return false;
   }
   function handleChange(e){
-    if(e.target.classList&&e.target.classList.contains("curveparam")){ var dn=e.target.dataset.dn,c=curveOf(dn),oldp=c.param; c.param=e.target.value;
-      var base=Abx.state().slots[dn]; if(base) send({cmd:"eval",value:dn+" $ "+stripParam(stripParam(base,oldp),c.param)});
+    if(e.target.classList&&e.target.classList.contains("curveparam")){begin(); var dn=e.target.dataset.dn,c=curveOf(dn); c.param=e.target.value;
       applyCurveD(dn,160); return true; }
-    if(e.target.classList&&e.target.classList.contains("curvebars")){ curveOf(e.target.dataset.dn).bars=+e.target.value; applyCurveD(e.target.dataset.dn); return true; }
+    if(e.target.classList&&e.target.classList.contains("curvebars")){begin(); curveOf(e.target.dataset.dn).bars=+e.target.value; applyCurveD(e.target.dataset.dn); return true; }
     return false;
   }
   // re-render the lanes when the live slot set changes (called from dashboard.js render())
@@ -84,9 +83,10 @@
 
   // draw modulation curves by dragging on a lane
   document.addEventListener("pointerdown",function(e){ var cv=e.target.closest&&e.target.closest(".curvecv"); if(!cv)return;
-    painting={dn:cv.dataset.dn,cv:cv,lastCol:null,lastVal:null}; paintCurve(cv,e.clientX,e.clientY); e.preventDefault(); });
+    begin();painting={dn:cv.dataset.dn,cv:cv,lastCol:null,lastVal:null}; paintCurve(cv,e.clientX,e.clientY); e.preventDefault(); });
   document.addEventListener("pointermove",function(e){ if(painting)paintCurve(painting.cv,e.clientX,e.clientY); });
   document.addEventListener("pointerup",function(){ if(painting){ var dn=painting.dn; painting=null; applyCurve(dn); } });
 
-  window.AbxCurves={ openCurves:openCurves, curveRender:curveRender, handleClick:handleClick, handleChange:handleChange, maybeRerender:maybeRerender, beforeStop:beforeStop };
+  document.addEventListener('pointercancel',beforeStop);
+  window.AbxCurves={sync:sync, openCurves:openCurves, curveRender:curveRender, handleClick:handleClick, handleChange:handleChange, maybeRerender:maybeRerender, beforeStop:beforeStop };
 })();

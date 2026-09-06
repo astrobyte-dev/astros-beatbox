@@ -1,6 +1,6 @@
 import http from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
-import { SETS_DIR, DIRT_SAMPLES_DIR } from "./config.js";
+import { SETS_DIR, DIRT_SAMPLES_DIR, PROJECTS_DIR } from "./config.js";
 import type { CommandResult } from "./commands.js";
 
 type CmdHandler = (body: unknown) => Promise<CommandResult>;
@@ -66,6 +66,11 @@ export function startDashboard(
       res.end(JSON.stringify(sets.sort()));
       return;
     }
+    if (req.url === "/projects") {
+      let files: string[] = [];
+      try { files = readdirSync(PROJECTS_DIR).filter(f => f.endsWith(".abx.json")).map(f => f.slice(0, -9)).sort(); } catch { /* no saved projects */ }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(files)); return;
+    }
     if (req.url && req.url.startsWith("/samples")) {
       let samples: string[] = [];
       try { samples = readdirSync(DIRT_SAMPLES_DIR, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name); } catch { /* none */ }
@@ -108,11 +113,11 @@ export function startDashboard(
         if (!ok) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "forbidden origin" })); return; }
       }
       let body = "";
-      req.on("data", (c) => { body += c; if (body.length > 128 * 1024) req.destroy(); });
+      req.on("data", (c) => { body += c; if (body.length > 4 * 1024 * 1024) req.destroy(); });
       req.on("end", async () => {
         try {
           const result = await onCmd(JSON.parse(body || "{}"));
-          const status = result.ok ? 200 : result.code === "VALIDATION" ? 400 : ["STALE_SESSION", "EXPIRED", "ID_CONFLICT"].includes(result.code) ? 409 : result.code === "BUSY" ? 503 : 500;
+          const status = result.ok ? 200 : result.code === "VALIDATION" ? 400 : ["STALE_SESSION", "STALE_PROJECT", "EXPIRED", "ID_CONFLICT"].includes(result.code) ? 409 : result.code === "BUSY" ? 503 : 500;
           res.writeHead(status, { "content-type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (e) {
