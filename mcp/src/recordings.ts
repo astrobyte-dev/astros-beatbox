@@ -3,10 +3,11 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, s
 import path from "node:path";
 import { z } from "zod";
 import { atomicWrite } from "./project-storage.js";
+import { recordingDiagnosticsSchema } from "./recording-diagnostics.js";
 
 const phases = z.enum(["preparing", "recording", "finalizing", "ready", "failed", "interrupted", "missing"]);
 const measurements = z.object({ bytes: z.number(), frames: z.number(), sampleRate: z.number(), channels: z.number(), duration: z.number(), peak: z.number(), rms: z.number(), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
-const entrySchema = z.object({ id: z.string().uuid(), name: z.string().max(200), projectId: z.string(), createdAt: z.string(), finishedAt: z.string().optional(), state: phases, error: z.string().optional(), audio: measurements.optional() }).strict();
+const entrySchema = z.object({ id: z.string().uuid(), name: z.string().max(200), projectId: z.string(), createdAt: z.string(), finishedAt: z.string().optional(), state: phases, error: z.string().optional(), warning: z.string().optional(), diagnostics: recordingDiagnosticsSchema.optional(), audio: measurements.optional() }).strict();
 export type RecordingEntry = z.infer<typeof entrySchema>;
 export type WavMeasurements = z.infer<typeof measurements>;
 

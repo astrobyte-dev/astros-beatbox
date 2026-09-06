@@ -8,9 +8,10 @@ import { scStr } from "./track.js";
 // boot logic must run on SystemClock (see superdirt_startup.scd), not AppClock.
 export class Sclang extends ProcDriver {
   constructor() {
-    // detached: give sclang (and its scsynth child) its own process group/console
-    // context so the audio callback thread can run when spawned from Node.
-    super(SCLANG, [], process.env, { detached: true, windowsHide: true }, true);
+    // The persistent runtime owns this interpreter. On Windows CREATE_NO_WINDOW
+    // must not be combined with DETACHED_PROCESS (Windows ignores it there).
+    // WASAPI/SystemClock do not require a separate visible console context.
+    super(SCLANG, [], process.env, { detached: process.platform !== "win32", windowsHide: true }, true);
   }
 
   /** Evaluate a chunk of SuperCollider code in the running interpreter. */

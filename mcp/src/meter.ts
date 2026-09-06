@@ -19,8 +19,12 @@ export class Meter {
   cycleAt = 0;   // Date.now() when received (browser subtracts age to anchor precisely)
   private sock = dgram.createSocket("udp4");
   error: string | null = null;
+  port: number | null = null;
+  startedAt: string | null = null;
+  listening = false;
 
   start(port: number): Promise<void> {
+    this.port = port;
     this.sock.on("message", (buf) => {
       const parts = buf.toString("utf8").trim().split(/\s+/);
       if (parts[0] === "MTR") {
@@ -63,12 +67,24 @@ export class Meter {
       this.sock.bind(port, "127.0.0.1", () => {
         this.sock.off("error", reject);
         this.sock.unref();
+        this.port = this.sock.address().port; this.listening = true; this.startedAt = new Date().toISOString();
         resolve();
       });
     });
   }
 
   stop(): void {
+    this.listening = false;
     try { this.sock.close(); } catch { /* ignore */ }
+  }
+
+  async restart(): Promise<void> {
+    const port = this.port;
+    if (port === null) throw new Error("Telemetry has no bound port");
+    if (this.listening) await new Promise<void>(resolve => this.sock.close(() => resolve()));
+    else { try { this.sock.close(); } catch { /* unbound */ } }
+    this.listening = false; this.error = null; this.lastUpdate = 0; this.l = 0; this.r = 0;
+    this.sock = dgram.createSocket("udp4");
+    await this.start(port);
   }
 }

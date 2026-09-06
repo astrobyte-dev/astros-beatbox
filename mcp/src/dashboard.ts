@@ -28,7 +28,7 @@ export function startDashboard(
   getState: () => unknown,
   getClock: () => unknown,
   onCmd: CmdHandler,
-  resources?: { sounds?: () => unknown; recordings?: RecordingCatalog; identity?: () => unknown; shutdown?: (session: string) => Promise<string> },
+  resources?: { sounds?: () => unknown; recordings?: RecordingCatalog; identity?: () => unknown; shutdown?: (session: string) => Promise<string>; system?: () => Promise<unknown>; logs?: (query: URLSearchParams) => unknown; bridge?: (body: unknown) => void },
 ): http.Server {
   const server = http.createServer((req, res) => {
     // Apply security headers to every response.
@@ -45,6 +45,12 @@ export function startDashboard(
     // Vite's production bundle shares this service and the existing guarded API.
     // Only flat, generated asset names are accepted; never resolve request paths.
     const urlPath = (req.url || '/').split('?')[0];
+    if (req.method === "GET" && (urlPath === "/runtime/health" || urlPath === "/runtime/logs")) {
+      res.setHeader("content-type", "application/json"); res.setHeader("cache-control", "no-store");
+      const result = urlPath === "/runtime/health" ? resources?.system?.() : resources?.logs?.(new URL(req.url!, "http://localhost").searchParams);
+      void Promise.resolve(result).then(data => { res.statusCode = data ? 200 : 404; res.end(JSON.stringify(data ?? null)); }).catch(() => { res.statusCode = 503; res.end(JSON.stringify({ error: "Runtime inspection unavailable" })); });
+      return;
+    }
     if (req.method === "GET" && urlPath === "/runtime") {
       res.writeHead(resources?.identity ? 200 : 404, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(resources?.identity?.() ?? null)); return;
     }
@@ -71,9 +77,9 @@ export function startDashboard(
       } catch (e) { res.writeHead(404, { "content-type": "text/plain" }); res.end(e instanceof Error ? e.message : "Recording unavailable"); }
       return;
     }
-    if (urlPath === '/studio' || urlPath.startsWith('/studio/')) {
+    if (urlPath === '/system' || urlPath === '/system/' || urlPath === '/studio' || urlPath.startsWith('/studio/')) {
       const asset = /^\/studio\/assets\/([a-zA-Z0-9_-]+\.(?:js|css|woff2?|svg))$/.exec(urlPath);
-      const index = urlPath === '/studio' || urlPath === '/studio/';
+      const index = ['/studio', '/studio/', '/system', '/system/'].includes(urlPath);
       if (!index && !asset) { res.writeHead(404); res.end('Studio file not found'); return; }
       try {
         const root = path.join(path.dirname(htmlPath), 'studio-dist');
@@ -141,7 +147,7 @@ export function startDashboard(
       req.on("close", () => { clearInterval(tick); sseCount--; });
       return;
     }
-    if (req.method === "POST" && (urlPath === "/cmd" || urlPath === "/runtime/stop")) {
+    if (req.method === "POST" && ["/cmd", "/runtime/stop", "/runtime/bridge"].includes(urlPath)) {
       // Enforce JSON body: reject non-JSON content types to prevent misuse.
       const ct = (req.headers["content-type"] ?? "").split(";")[0].trim();
       if (ct && ct !== "application/json") {
@@ -161,6 +167,7 @@ export function startDashboard(
       req.on("data", (c) => { body += c; if (body.length > 4 * 1024 * 1024) req.destroy(); });
       req.on("end", async () => {
         try {
+          if (urlPath === "/runtime/bridge") { if (!resources?.bridge) throw new Error("Bridge registration unavailable"); resources.bridge(JSON.parse(body)); res.writeHead(200); res.end('{}'); return; }
           if (urlPath === "/runtime/stop") {
             if (!resources?.shutdown) throw new Error("Runtime control unavailable");
             const message = await resources.shutdown(JSON.parse(body).sessionId); res.writeHead(200); res.end(message); return;

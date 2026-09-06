@@ -12,11 +12,13 @@ import { libraryAsset, resolveSample, soundLibrary } from "./sound-library.js";
 import { Preview } from "./preview.js";
 import { RecordingCatalog, validateWav } from "./recordings.js";
 import type { Asset } from "./sound-library.js";
+import { captureRoute, captureInput, finishRecorder, recordingWarning, type RecordingDiagnostics } from "./recording-diagnostics.js";
 
 export interface CommandEngine {
   generation: number; running: boolean; state: string; error: string | null;
   ensureBooted(): Promise<void>; reboot(): Promise<void>; assertGeneration(generation: number): void;
   assertSampleLoaded?(asset: Asset): void;
+  stop?(): void;
   tidal: { eval(code: string, id?: string): Promise<EvalResult>; hush(id?: string): Promise<EvalResult> };
   sclang: { eval(code: string, id?: string): Promise<EvalResult>; evalRoutine(code: string, id?: string): Promise<EvalResult> };
 }
@@ -39,6 +41,14 @@ export class Application {
   private recordingId: string | null = null;
   private recordingGeneration: number | null = null;
   private recorderUncertain = false;
+  private recordingDiagnostics: RecordingDiagnostics | undefined;
+  private recentCommands: RecordingDiagnostics["commands"] = [];
+  private closing = false;
+  private lifecyclePending = false;
+  readonly lifecycle = { action: null as string | null, phase: "idle", at: Date.now(), error: null as string | null };
+  lifecycleHooks: { restartServices?: () => Promise<void>; quit?: () => Promise<void>; log?: (source: "runtime" | "recording", message: string, error?: boolean) => void } = {};
+  private savedProject: { id: string; revision: number } | null = null;
+  get savedState() { const p = this.project.document; return this.savedProject?.id === p.id && this.savedProject.revision === p.revision ? "saved" : "unsaved"; }
   readonly runtime = { appliedRevision: null as number | null, appliedProjectId: null as string | null, song: false, error: null as string | null };
   constructor(readonly engine: CommandEngine, private paths: ApplicationPaths) {
     this.recordings = new RecordingCatalog(paths.recordings);
@@ -83,23 +93,43 @@ export class Application {
     const fingerprint = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
     const prior = this.requests.get(id);
     if (prior) return prior.fingerprint === fingerprint ? prior.result : Promise.resolve(this.failure(id, "ID_CONFLICT", "Operation ID was already used for a different command."));
+    const lifecycle = ["audio.stop", "audio.restart", "runtime.restart", "runtime.quit"].includes(c.cmd);
+    if (lifecycle && (!c.sessionId || c.expectedGeneration === undefined)) return Promise.resolve(this.failure(id, "VALIDATION", "Lifecycle actions require sessionId and expectedGeneration."));
+    if (c.expectedGeneration !== undefined && c.expectedGeneration !== this.engine.generation) return Promise.resolve(this.failure(id, "STALE_GENERATION", "Audio generation changed; refresh before controlling services."));
+    if (this.lifecyclePending || this.closing && c.cmd !== "runtime.quit") return Promise.resolve(this.failure(id, "BUSY", "A lifecycle operation is in progress; wait for System status."));
     for (const [key, entry] of this.requests) if (entry.done && now - entry.at > Application.RETRY_MS) this.requests.delete(key);
     if (this.waiting >= 256 || this.requests.size >= 8192) return Promise.resolve(this.failure(id, "BUSY", "Command queue is full; wait for current operations."));
     this.waiting++;
+    const wasClosing = this.closing;
+    if (lifecycle) { this.lifecyclePending = true; this.transition(c.cmd, "Waiting for current work"); }
+    if (c.cmd === "runtime.quit") this.closing = true;
     const generation = this.engine.generation;
     const projectId = this.project.document.id;
     const result = this.queue.then(async (): Promise<CommandResult> => {
       try {
+        if (c.issuedAt !== undefined && Date.now() - c.issuedAt > Application.RETRY_MS) {
+          if (c.cmd === "runtime.quit") this.closing = wasClosing;
+          const message = "Request expired while waiting; it will not be executed.";
+          if (lifecycle) { this.lifecycle.error = message; this.transition(c.cmd, "Failed"); }
+          return this.failure(id, "EXPIRED", message);
+        }
         // Do not execute work queued against an engine that has since restarted.
         this.engine.assertGeneration(generation);
         if (c.projectId !== undefined) this.project.assert(c.projectId, c.revision!);
-        else if (requiresProjectRevision(c.cmd) && projectId !== this.project.document.id) throw new ProjectConflict("Queued command belongs to a previous project");
+        else if ((requiresProjectRevision(c.cmd) || c.cmd === "record.start" || c.cmd === "record") && projectId !== this.project.document.id) throw new ProjectConflict("Queued command belongs to a previous project");
+        this.traceCommand(c.cmd, "begin");
         const reply = await this.execute(c, id);
+        this.traceCommand(c.cmd, "complete");
         // Keep retry results small: full documents belong to status, not thousands
         // of cached command responses. Identity/revision is enough to chain local edits.
         return { ok: true, operationId: id, sessionId: this.sessionId, generation: this.engine.generation, projectId: this.project.document.id, revision: this.project.document.revision, history: this.project.history, ...reply };
-      } catch (e) { return this.failure(id, e instanceof ProjectConflict ? e.code : "EXECUTION", e); }
-      finally { this.waiting--; }
+      } catch (e) {
+        this.traceCommand(c.cmd, "failed");
+        if (lifecycle) { this.lifecycle.error = e instanceof Error ? e.message : String(e); this.transition(c.cmd, "Failed"); }
+        this.lifecycleHooks.log?.(c.cmd.startsWith("record") ? "recording" : "runtime", c.cmd + " failed: " + String(e), true);
+        return this.failure(id, e instanceof ProjectConflict ? e.code : "EXECUTION", e);
+      }
+      finally { this.waiting--; if (lifecycle) this.lifecyclePending = false; }
     });
     const entry = { fingerprint, at: c.issuedAt ?? now, result, done: false };
     this.requests.set(id, entry);
@@ -177,6 +207,7 @@ export class Application {
     }
   }
   private async execute(c: Command, id: string): Promise<{ msg: string; output?: string; acknowledgement?: EvalResult["acknowledgement"] }> {
+    if (["audio.stop", "audio.restart", "runtime.restart", "runtime.quit"].includes(c.cmd)) return this.controlLifecycle(c, id);
     if (c.cmd === "preview.play") { await this.preview.play(String(c.value), id); return { msg: "Preview playing through your audio output" }; }
     if (c.cmd === "preview.stop") { await this.preview.stop(id); return { msg: "Preview stopped" }; }
     if (c.cmd === "sound.replace") {
@@ -190,17 +221,17 @@ export class Application {
     if (c.cmd === "record.stop" || c.cmd === "record") {
       const target = c.cmd === "record.stop" ? String(c.value) : this.recordingId;
       const entry = target ? this.recordings.get(target) : null;
-      if (entry?.state === "ready") { this.recordings.retrieve(entry.id); return { msg: "Recording ready. Find it in Recordings." }; }
+      if (entry?.state === "ready") { this.recordings.retrieve(entry.id); return { msg: entry.warning ?? "Recording ready. Find it in Recordings." }; }
       if (!target || target !== this.recordingId || !this.rig.recording) throw new Error(entry?.error ?? "This recording is not active or ready");
-      await this.finishRecording(id); return { msg: "Recording ready. Find it in Recordings." };
+      await this.finishRecording(id); return { msg: this.recordings.get(target)?.warning ?? "Recording ready. Find it in Recordings." };
     }
     if (c.cmd === "project.edit") { await this.changeProject(this.project.prepare(c.edits), c, id); for (const e of c.edits!) if (e.type === "scene.activate") this.project.workspace.selectedSceneId = e.sceneId; return { msg: c.label! }; }
     if (c.cmd === "project.undo" || c.cmd === "project.redo") { const redo = c.cmd === "project.redo"; await this.changeProject(this.project.historyTarget(redo), c, id, redo ? "redo" : "undo"); return { msg: redo ? "Redone" : "Undone" }; }
-    if (c.cmd === "project.save") { if (!this.project.storage) throw new Error("Project storage not configured"); this.project.storage.save(String(c.value), this.project.document); return { msg: "Saved complete project: " + c.value }; }
+    if (c.cmd === "project.save") { if (!this.project.storage) throw new Error("Project storage not configured"); this.project.storage.save(String(c.value), this.project.document); this.savedProject = { id: this.project.document.id, revision: this.project.document.revision }; return { msg: "Saved complete project: " + c.value }; }
     if (["project.load", "project.new", "project.recover"].includes(c.cmd)) {
       const next = c.cmd === "project.new" ? emptyProject() : c.cmd === "project.recover" ? this.project.storage?.recover() : this.project.storage?.load(String(c.value));
       if (!next) throw new Error("No recoverable project available");
-      await this.changeProject(this.project.switchTarget(next), c, id, "switch"); return { msg: "Project opened" };
+      await this.changeProject(this.project.switchTarget(next), c, id, "switch"); this.savedProject = c.cmd === "project.load" ? { id: this.project.document.id, revision: this.project.document.revision } : null; return { msg: "Project opened" };
     }
     if (c.cmd === "song.start" || c.cmd === "song.stop") {
       if (c.cmd === "song.start" && !this.project.document.arrangement.length) throw new Error("Add scenes to the song chain first");
@@ -289,21 +320,37 @@ export class Application {
     r.synchronized = true;
   }
 
+  private traceCommand(command: string, phase: "begin" | "complete" | "failed") {
+    this.recentCommands.push({ at: Date.now(), command, phase, generation: this.engine.generation, revision: this.project.document.revision });
+    this.recentCommands = this.recentCommands.slice(-32);
+  }
+  private recordingContext(): RecordingDiagnostics["start"] {
+    const p = this.project.document;
+    return { at: Date.now(), generation: this.engine.generation, engineState: this.engine.state, projectId: p.id, revision: p.revision,
+      appliedRevision: this.runtime.appliedRevision, appliedGeneration: this.appliedGeneration, appliedProjectId: this.runtime.appliedProjectId,
+      synchronized: this.rig.synchronized, stopped: this.rig.stopped, paused: this.rig.paused, song: this.runtime.song, preview: this.preview.snapshot().state, bpm: p.tempo.bpm, beatsPerCycle: p.tempo.beatsPerCycle,
+      mixer: p.tracks.map(t => ({ slot: t.slot, channel: t.channel, active: !!t.activeClipId, ...t.mixer })) };
+  }
   private async startRecording(id: string): Promise<void> {
     if (this.recorderUncertain) throw new Error("Recorder cleanup is uncertain. Reset the audio engine before starting another take.");
     if (this.rig.recording) return;
     const entry = this.recordings.create(this.project.document.id, this.project.document.name);
     this.recordingId = entry.id;
     this.rig.recPath = this.recordings.file(entry.id).replace(/\\/g, "/");
+    this.recordingDiagnostics = { sessionId: this.sessionId, operationId: id, start: this.recordingContext(), probe: "pending", commands: [...this.recentCommands] };
     try {
+      this.recordings.update(entry.id, { diagnostics: this.recordingDiagnostics });
       await this.engine.ensureBooted();
       if (this.engine.state !== "ready") throw new Error("Audio must be ready before recording");
       this.recordingGeneration = this.engine.generation;
-      await this.sc(`SynthDef(\\diskrec, { |buf, bus| DiskOut.ar(buf, In.ar(bus,2)) }).add; ~recBuf = Buffer.alloc(s, 65536, 2); s.sync; ~recBuf.write("${scStr(this.rig.recPath)}", "wav", "int16", 0, 0, true); s.sync; ~recSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf, ~recBuf.bufnum, \\bus, ~abxRecordBus.index]); s.sync;`, id, true);
+      const result = await this.sc(`SynthDef(\\abxRecorder, { |buf, bus, stats| var sig = In.ar(bus,2); DiskOut.ar(buf, sig); Out.kr(stats, [A2K.kr(Peak.ar(sig[0].abs.max(sig[1].abs), 0)), Sweep.kr(0, 1)]); }).add; ~recStats = Bus.control(s, 2); ~recStats.setn([0, 0]); ~recBuf = Buffer.alloc(s, 65536, 2); s.sync; ~recBuf.write("${scStr(this.rig.recPath)}", "wav", "int16", 0, 0, true); s.sync; ~recSynth = Synth.tail(RootNode(s), \\abxRecorder, [\\buf, ~recBuf.bufnum, \\bus, ~abxRecordBus.index, \\stats, ~recStats.index]); s.sync; ("\\n" ++ "ABX_RO" ++ "UTE ${entry.id} " ++ ~abxRecordBus.index ++ " " ++ ~abxRecordTap.nodeID ++ " " ++ ~abxPreviewGroup.nodeID ++ " " ++ ~recSynth.nodeID ++ " " ++ (~abxEventCount ? 0)).postln;`, id, true);
+      this.recordingDiagnostics.route = captureRoute(result.output, entry.id);
+      this.recordingDiagnostics.startedAt = Date.now();
       this.rig.recording = true; this.recordingGeneration = this.engine.generation;
-      this.recordings.update(entry.id, { state: "recording" });
+      this.recordings.update(entry.id, { state: "recording", diagnostics: this.recordingDiagnostics });
+      this.lifecycleHooks.log?.("recording", `Recording ${entry.id} started; generation ${this.recordingGeneration}, revision ${this.project.document.revision}, route ${JSON.stringify(this.recordingDiagnostics.route ?? null)}`);
     } catch (e) {
-      try { await this.sc("~recSynth.free; s.sync; ~recBuf.close; s.sync; ~recBuf.free; s.sync;", id, true); this.rig.recording = false; } catch { this.recorderUncertain = true; }
+      try { await this.sc(finishRecorder(entry.id), id, true); this.rig.recording = false; } catch { this.recorderUncertain = true; }
       this.recordings.fail(entry.id, String(e));
       throw e;
     }
@@ -311,19 +358,68 @@ export class Application {
   private async finishRecording(id: string): Promise<void> {
     const target = this.recordingId!;
     try {
-      this.recordings.update(target, { state: "finalizing" });
+      if (this.recordingDiagnostics) { this.recordingDiagnostics.finish = this.recordingContext(); this.recordingDiagnostics.commands = [...this.recentCommands]; }
+      this.recordings.update(target, { state: "finalizing", diagnostics: this.recordingDiagnostics });
       if (this.recordingGeneration !== this.engine.generation) throw new Error("Recording engine generation changed");
       // Stop the writer before closing its buffer; both barriers precede validation.
-      await this.sc("~recSynth.free; s.sync; ~recBuf.close; s.sync; ~recBuf.free; s.sync;", id, true);
+      const result = await this.sc(finishRecorder(target), id, true);
       this.rig.recording = false;
       this.recorderUncertain = false;
       const audio = validateWav(this.rig.recPath);
-      this.recordings.update(target, { state: "ready", audio, finishedAt: new Date().toISOString() });
+      if (this.recordingDiagnostics) { this.recordingDiagnostics.input = captureInput(result.output, target); this.recordingDiagnostics.probe = this.recordingDiagnostics.input ? "captured" : "unavailable"; }
+      const warning = recordingWarning(audio.peak, this.recordingDiagnostics);
+      this.recordings.update(target, { state: "ready", audio, warning, diagnostics: this.recordingDiagnostics, finishedAt: new Date().toISOString() });
+      this.lifecycleHooks.log?.("recording", `Recording ${target} finalized: ${audio.frames} frames, WAV peak ${audio.peak}, RMS ${audio.rms}; input ${JSON.stringify(this.recordingDiagnostics?.input ?? null)}. ${warning ?? "Available in the catalogue."}`);
     } catch (e) {
       this.recorderUncertain = this.rig.recording;
       this.recordings.fail(target, String(e));
       throw e;
     }
+  }
+
+  private transition(action: string, phase: string) {
+    Object.assign(this.lifecycle, { action, phase, at: Date.now() });
+    this.lifecycleHooks.log?.("runtime", phase);
+  }
+
+  private async controlLifecycle(c: Command, id: string): Promise<{ msg: string }> {
+    if (!this.engine.stop) throw new Error("Engine lifecycle unavailable");
+    if (c.cmd === "runtime.quit" && !this.lifecycleHooks.quit) throw new Error("Application shutdown unavailable");
+    this.lifecycle.error = null;
+    const failures: string[] = [];
+    if (this.rig.recording || this.recorderUncertain) {
+      this.transition(c.cmd, "Waiting for recording to finalize");
+      try { await this.finishRecording(id); this.lifecycleHooks.log?.("recording", "Recording finalized before lifecycle change"); }
+      catch (e) { failures.push("Recording finalization was not confirmed: " + String(e)); }
+    }
+    this.transition(c.cmd, "Stopping musical work");
+    if (this.engine.running) {
+      // Keep the existing transport state for Restart, including arrangement mode.
+      try { await this.tidal("hush", id); await this.preview.stop(id); }
+      catch (e) { this.lifecycleHooks.log?.("runtime", "Graceful silence failed; stopping verified owned audio: " + String(e), true); }
+    }
+    this.rig.synchronized = false;
+    if (c.cmd === "audio.restart" || c.cmd === "runtime.restart") {
+      this.transition(c.cmd, "Restarting audio");
+      if (c.cmd === "runtime.restart") {
+        this.engine.stop();
+        this.transition(c.cmd, "Restarting telemetry");
+        await this.lifecycleHooks.restartServices?.();
+      }
+      await this.engine.reboot(); this.rig.recording = false; this.recorderUncertain = false;
+      await this.restore(id);
+    } else {
+      this.transition(c.cmd, "Stopping owned audio processes");
+      this.engine.stop();
+      this.rig.recording = false; this.recorderUncertain = false;
+      this.rig.stopped = true; this.rig.paused = true; this.runtime.song = false;
+      this.runtime.appliedRevision = null; this.appliedGeneration = null;
+    }
+    // Retain HTTP on any failure so the user can inspect and retry cleanup.
+    if (failures.length) throw new Error(failures.join("; "));
+    if (c.cmd === "runtime.quit") { this.transition(c.cmd, "Closing Beatbox"); await this.lifecycleHooks.quit!(); }
+    else this.transition(c.cmd, "Complete");
+    return { msg: c.cmd === "runtime.quit" ? "Beatbox quit successfully. Completed recordings and recovery checkpoints are kept." : c.cmd === "audio.stop" ? "Audio stopped. Your jam is kept; Restart audio to prepare it again." : "Services ready; your jam and transport state were restored." };
   }
 
   private async handle(c: Command, id: string): Promise<{ msg: string; output?: string; acknowledgement?: EvalResult["acknowledgement"] }> {

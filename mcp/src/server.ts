@@ -12,6 +12,14 @@ let observed: { sessionId: string; generation: number };
 async function state() { const r = await fetch(runtime.url + "/state", { signal: AbortSignal.timeout(5000) }); if (!r.ok) throw new Error("Runtime unavailable"); const s = await r.json(); observed = { sessionId: s.sessionId, generation: s.generation }; return s; }
 await state();
 const server = new McpServer({ name: "tidal-livecoder", version: "0.2.0" });
+const bridgeId = randomUUID();
+async function bridge(connected: boolean) {
+  try { await fetch(runtime.url + "/runtime/bridge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: bridgeId, pid: process.pid, sessionId: observed.sessionId, connected }), signal: AbortSignal.timeout(2000) }); }
+  catch { /* Connection observation never changes runtime ownership. */ }
+}
+await bridge(true);
+const heartbeat = setInterval(() => { void bridge(true); }, 4000); heartbeat.unref();
+if (runtime.reused) process.stderr.write("Beatbox was already running. Studio: " + runtime.url + "/studio\n");
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 const retry = {
   operationId: z.string().optional().describe("Reuse with the same command for a retry; requires sessionId and issuedAt."),
@@ -46,7 +54,7 @@ server.tool("hush", "Silence and clear Tidal patterns. Dashboard Stop instead ke
 server.tool("eval_sc", "Evaluate raw SuperCollider code. Acknowledgement covers the expression, not work it schedules for later.",
   { ...retry, code: z.string() }, async ({ code, ...meta }) => execute({ ...meta, cmd: "eval_sc", value: code }));
 server.tool("status", "Report the persistent runtime, engine health, recording catalog and canonical project.", async () => text(JSON.stringify(await state())));
-process.stdin.on("end", () => { runtime.close(); void server.close(); });
+process.stdin.on("end", () => { clearInterval(heartbeat); void bridge(false).finally(() => { runtime.close(); void server.close(); }); });
 process.on("SIGINT", () => { runtime.close(); process.exit(0); });
 process.on("SIGTERM", () => { runtime.close(); process.exit(0); });
 process.on("exit", () => runtime.close());

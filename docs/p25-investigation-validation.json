@@ -1,0 +1,580 @@
+{
+  "originalSilentTakeReproduced": false,
+  "rootCauseEstablished": false,
+  "p2LiveRepeats": [
+    {
+      "run": 1,
+      "journey": {
+        "bytes": 484140,
+        "frames": 121024,
+        "sampleRate": 48000,
+        "channels": 2,
+        "duration": 2.521333333333333,
+        "peak": 8035,
+        "rms": 1308.895817771092,
+        "sha256": "23113898740d8f5b65b3cd555e7c21cf686d2d5ff0a7436e026bfdd05e49e1f5"
+      },
+      "preview": {
+        "audible": {
+          "bytes": 241964,
+          "frames": 60480,
+          "sampleRate": 48000,
+          "channels": 2,
+          "duration": 1.26,
+          "peak": 21299,
+          "rms": 5289.9975096559365,
+          "sha256": "548792aacdac816211c7ff439fda49d8980e6011093ece5edb0c3de0a75b81dd"
+        },
+        "excluded": {
+          "bytes": 209452,
+          "frames": 52352,
+          "sampleRate": 48000,
+          "channels": 2,
+          "duration": 1.0906666666666667,
+          "peak": 0,
+          "rms": 0,
+          "sha256": "971fed7f2ed9586c2df973fc76db0f10bc97f70a74a5025a51c752947d5039d6"
+        }
+      }
+    },
+    {
+      "run": 2,
+      "journey": {
+        "bytes": 499244,
+        "frames": 124800,
+        "sampleRate": 48000,
+        "channels": 2,
+        "duration": 2.6,
+        "peak": 8034,
+        "rms": 1354.3939270742146,
+        "sha256": "c6edd77d4bd6e7818dcf791a7879b19538dbca52e27201eda962d7a2ba0430d1"
+      },
+      "preview": {
+        "audible": {
+          "bytes": 245804,
+          "frames": 61440,
+          "sampleRate": 48000,
+          "channels": 2,
+          "duration": 1.28,
+          "peak": 21299,
+          "rms": 5255.443627072992,
+          "sha256": "ccb471cfd2e91553d8de3d0552eb9e3227746b53e76ac7bfa45a9968c9d3682d"
+        },
+        "excluded": {
+          "bytes": 213292,
+          "frames": 53312,
+          "sampleRate": 48000,
+          "channels": 2,
+          "duration": 1.1106666666666667,
+          "peak": 0,
+          "rms": 0,
+          "sha256": "d314c743af81c64e31c357dfab980777bbb6cf2f1c85e49791804962895c4222"
+        }
+      }
+    },
+    {
+      "run": 3,
+      "journey": {
+        "bytes": 482092,
+        "frames": 120512,
+        "sampleRate": 48000,
+        "channels": 2,
+        "duration": 2.510666666666667,
+        "peak": 8033,
+        "rms": 1365.1882121006163,
+        "sha256": "cc0eca920d23048ef900c4d547857afc5dbb6c69a9da40769d744c385ffbead0"
+      },
+      "preview": {
+        "audible": {
+          "bytes": 253484,
+          "frames": 63360,
+          "sampleRate": 48000,
+          "channels": 2,
+          "duration": 1.32,
+          "peak": 21299,
+          "rms": 5190.374921610014,
+          "sha256": "ab523e89b233132fd42fb41885bca4d8088eed22eac236470f65b4d744d7fb11"
+        },
+        "excluded": {
+          "bytes": 222764,
+          "frames": 55680,
+          "sampleRate": 48000,
+          "channels": 2,
+          "duration": 1.16,
+          "peak": 0,
+          "rms": 0,
+          "sha256": "061f8d279eb760a64dbc1d62b5fa299df9e274f22192c3e58cc568a03a721423"
+        }
+      }
+    }
+  ],
+  "orderingRepeats": [
+    {
+      "run": 1,
+      "takes": [
+        {
+          "scenario": "cold preparation while stopped",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.64933335781097,
+            "events": 0
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "immediate first Play",
+          "peak": 8371,
+          "input": {
+            "peak": 0.25546851754189,
+            "seconds": 2.5586667060852,
+            "events": 19
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 1",
+          "peak": 8034,
+          "input": {
+            "peak": 0.24519591033459,
+            "seconds": 2.7293334007263,
+            "events": 39
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 1",
+          "peak": 8035,
+          "input": {
+            "peak": 0.24522958695889,
+            "seconds": 2.5520000457764,
+            "events": 58
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 2",
+          "peak": 8047,
+          "input": {
+            "peak": 0.24557545781136,
+            "seconds": 2.7093334197998,
+            "events": 79
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 2",
+          "peak": 8037,
+          "input": {
+            "peak": 0.24527925252914,
+            "seconds": 2.5506665706635,
+            "events": 99
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 3",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24524538218975,
+            "seconds": 2.7586667537689,
+            "events": 118
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 3",
+          "peak": 8039,
+          "input": {
+            "peak": 0.24533618986607,
+            "seconds": 2.5733332633972,
+            "events": 138
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 4",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24525502324104,
+            "seconds": 2.7493333816528,
+            "events": 158
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 4",
+          "peak": 8035,
+          "input": {
+            "peak": 0.24522878229618,
+            "seconds": 2.5586667060852,
+            "events": 177
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "immediate audio restart",
+          "peak": 8501,
+          "input": {
+            "peak": 0.25944674015045,
+            "seconds": 2.5680000782013,
+            "events": 18
+          },
+          "generation": 1
+        },
+        {
+          "scenario": "intentional stopped silence",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.65866667032242,
+            "events": 18
+          },
+          "generation": 1
+        },
+        {
+          "scenario": "intentional all-muted silence",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.65066665410995,
+            "events": 37
+          },
+          "generation": 1
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "takes": [
+        {
+          "scenario": "cold preparation while stopped",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.64800000190735,
+            "events": 0
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "immediate first Play",
+          "peak": 8423,
+          "input": {
+            "peak": 0.25707972049713,
+            "seconds": 2.5480000972748,
+            "events": 19
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 1",
+          "peak": 8034,
+          "input": {
+            "peak": 0.24520197510719,
+            "seconds": 2.7186665534973,
+            "events": 38
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 1",
+          "peak": 8035,
+          "input": {
+            "peak": 0.2452227473259,
+            "seconds": 2.5439999103546,
+            "events": 57
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 2",
+          "peak": 8032,
+          "input": {
+            "peak": 0.24514074623585,
+            "seconds": 2.702666759491,
+            "events": 76
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 2",
+          "peak": 8035,
+          "input": {
+            "peak": 0.24522535502911,
+            "seconds": 2.5426666736603,
+            "events": 95
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 3",
+          "peak": 8036,
+          "input": {
+            "peak": 0.2452482432127,
+            "seconds": 2.7093334197998,
+            "events": 116
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 3",
+          "peak": 8046,
+          "input": {
+            "peak": 0.24556531012058,
+            "seconds": 2.5413334369659,
+            "events": 135
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 4",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24525301158428,
+            "seconds": 2.7213332653046,
+            "events": 155
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 4",
+          "peak": 8035,
+          "input": {
+            "peak": 0.24523122608662,
+            "seconds": 2.5586667060852,
+            "events": 175
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "immediate audio restart",
+          "peak": 8481,
+          "input": {
+            "peak": 0.25884184241295,
+            "seconds": 2.5480000972748,
+            "events": 19
+          },
+          "generation": 1
+        },
+        {
+          "scenario": "intentional stopped silence",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.65200001001358,
+            "events": 19
+          },
+          "generation": 1
+        },
+        {
+          "scenario": "intentional all-muted silence",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.64266663789749,
+            "events": 40
+          },
+          "generation": 1
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "takes": [
+        {
+          "scenario": "cold preparation while stopped",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.64933335781097,
+            "events": 0
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "immediate first Play",
+          "peak": 8408,
+          "input": {
+            "peak": 0.25661763548851,
+            "seconds": 2.5480000972748,
+            "events": 19
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 1",
+          "peak": 8037,
+          "input": {
+            "peak": 0.24527424573898,
+            "seconds": 2.6933333873749,
+            "events": 38
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 1",
+          "peak": 8034,
+          "input": {
+            "peak": 0.24517939984798,
+            "seconds": 2.5520000457764,
+            "events": 57
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 2",
+          "peak": 8032,
+          "input": {
+            "peak": 0.24514119327068,
+            "seconds": 2.7119998931885,
+            "events": 76
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 2",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24525228142738,
+            "seconds": 2.5586667060852,
+            "events": 95
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 3",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24525894224644,
+            "seconds": 2.7106666564941,
+            "events": 114
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 3",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24526007473469,
+            "seconds": 2.5493333339691,
+            "events": 135
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "project switch 4",
+          "peak": 8036,
+          "input": {
+            "peak": 0.24525861442089,
+            "seconds": 2.7119998931885,
+            "events": 155
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "mixer restore 4",
+          "peak": 8035,
+          "input": {
+            "peak": 0.24523361027241,
+            "seconds": 2.5426666736603,
+            "events": 173
+          },
+          "generation": 0
+        },
+        {
+          "scenario": "immediate audio restart",
+          "peak": 8469,
+          "input": {
+            "peak": 0.25846588611603,
+            "seconds": 2.5480000972748,
+            "events": 18
+          },
+          "generation": 1
+        },
+        {
+          "scenario": "intentional stopped silence",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.64800000190735,
+            "events": 18
+          },
+          "generation": 1
+        },
+        {
+          "scenario": "intentional all-muted silence",
+          "peak": 0,
+          "input": {
+            "peak": 0,
+            "seconds": 0.66133332252502,
+            "events": 37
+          },
+          "generation": 1
+        }
+      ]
+    }
+  ],
+  "targetedTests": {
+    "perRun": 91,
+    "runs": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "completeSuite": {
+    "passed": 157,
+    "failed": 0,
+    "skipped": 0
+  },
+  "humanConsoleFlash": {
+    "status": "passed",
+    "confirmedBy": "user",
+    "date": "2026-09-07",
+    "browser": "Opera GX",
+    "expectedStudioRequestObserved": true,
+    "consoleShowEvents": 0,
+    "existingRuntimeAndSessionPreserved": true,
+    "realWindowsValidation": true
+  },
+  "noP3": true,
+  "persistentReconnect": {
+    "before": 0.222,
+    "disconnected": 0.248,
+    "reconnected": 0.216,
+    "generation": 0,
+    "recording": {
+      "bytes": 1156396,
+      "frames": 289088,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 6.022666666666667,
+      "peak": 8047,
+      "rms": 1369.9226404956414,
+      "sha256": "af5c9c70cc13c1dcf4509b30535e24f162556373077c2ddc2add2c20ae82bb14"
+    }
+  },
+  "windowsLifecycle": {
+    "passed": true,
+    "stages": [
+      "clean Windows Script Host launcher (same headless path; browser opened by test)",
+      "real inventory / Windows PIDs / ports / audio / Studio navigation",
+      "restart audio restores music",
+      "second launch reuses owner and creates no duplicate audio processes",
+      "stop audio releases ports",
+      "restart all owned services and resume",
+      "external TCP conflict inspected and left alive",
+      "Quit finalizes recording and exits runtime plus every owned process; ports released",
+      "normal relaunch recovers stopped"
+    ],
+    "consoleShowEvents": 0,
+    "evidence": "p25-windows-validation.json"
+  },
+  "browserChecks": {
+    "legacy": true,
+    "studio": true,
+    "p2": true,
+    "system": true
+  },
+  "typecheck": "server and Studio passed",
+  "finalDiffReview": "completed; no runtime ownership replacement, no audio routing change, no dependency changes; git diff --check passed"
+}

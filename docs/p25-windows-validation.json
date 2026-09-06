@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "platform": "win32",
+  "description": "Portable summary of real Windows lifecycle assertions; raw process inventories, local paths and window events intentionally excluded.",
+  "stages": [
+    "clean Windows Script Host launcher (same headless path; browser opened by test)",
+    "real inventory / Windows PIDs / ports / audio / Studio navigation",
+    "restart audio restores music",
+    "second launch reuses owner and creates no duplicate audio processes",
+    "stop audio releases ports",
+    "restart all owned services and resume",
+    "external TCP conflict inspected and left alive",
+    "Quit finalizes recording and exits runtime plus every owned process; ports released",
+    "normal relaunch recovers stopped"
+  ],
+  "musicPeaks": [
+    0.2,
+    0.216,
+    0.148
+  ],
+  "quitRecording": {
+    "bytes": 445484,
+    "frames": 111360,
+    "sampleRate": 48000,
+    "channels": 2,
+    "duration": 2.32,
+    "peak": 8035,
+    "rms": 1330.1691022329458,
+    "sha256": "81b1b24d78ffa7bda812bd682517c05fb596e57a959a5165510ef0000805cc2c"
+  },
+  "consoleShowEvents": 0,
+  "verifiedOwnedProcessesExited": true,
+  "audioPortsReleased": true,
+  "humanAcceptance": {
+    "status": "passed",
+    "date": "2026-09-07",
+    "confirmedBy": "user",
+    "browser": "Opera GX",
+    "expectedStudioRequestObserved": true,
+    "consoleShowEvents": 0,
+    "existingRuntimeAndSessionPreserved": true,
+    "realWindowsValidation": true
+  },
+  "browserEvidence": "p25-browser-launch-measurements.json",
+  "date": "2026-09-07"
+}

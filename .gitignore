@@ -14,12 +14,21 @@ audio_device.txt
 .abx-recovery/
 projects/
 *.log
+mcp/launch-error.txt
+.mcp.json
+.env
+.env.*
+!.env.example
 sc_fc.log
 tidal_fc.log
 
 # disposable browser failure output (validation evidence is kept in docs)
 /docs/p0b-dashboard-failure.png
 /docs/p2-failure.png
+# Raw acceptance captures contain local process inventories / recording sidecars.
+# Portable reviewed summaries and intentional milestone screenshots are committed.
+/docs/p25-runtime-measurements.json
+/docs/p25-recording-ordering.json
 
 # editor / OS
 .vscode/

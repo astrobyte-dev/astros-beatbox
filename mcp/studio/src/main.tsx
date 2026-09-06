@@ -6,5 +6,6 @@ import "@fontsource/dm-sans/latin-500.css";
 import "@fontsource/dm-sans/latin-600.css";
 import "./style.css";
 import { App } from "./App";
+import { System } from "./System";
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(location.pathname.startsWith("/system") ? <System /> : <App />);

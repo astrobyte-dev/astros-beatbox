@@ -190,7 +190,8 @@ export class StudioClient {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...command,
-          ...(!command.cmd.startsWith("preview.") && !command.cmd.startsWith("record") ? { projectId: base.id, revision: base.revision } : {}),
+          ...(!command.cmd.startsWith("preview.") && command.cmd !== "record.stop" ? { projectId: base.id, revision: base.revision } : {}),
+          ...(command.cmd === "record.start" ? { expectedGeneration: this.state?.generation } : {}),
           operationId: globalThis.crypto.randomUUID(),
           sessionId: base.sessionId,
           issuedAt: Date.now(),

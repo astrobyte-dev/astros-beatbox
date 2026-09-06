@@ -185,6 +185,7 @@ export function App() {
       <a className="skip-link" href="#workspace">
         Skip to instruments
       </a>
+      {new URLSearchParams(location.search).has("alreadyRunning") && <p className="system-existing" role="status">Beatbox was already running. You’re connected to your existing jam. <a href="/system">Open System</a></p>}
       <header className="topbar">
         <a href="/studio" className="brand" aria-label="Astro's Beatbox studio">
           <span className="brand-mark">
@@ -272,6 +273,7 @@ export function App() {
           <Icon name="save" />
           Save jam
         </button>
+        <a href="/system" className="studio-system-link">System</a>
       </header>
       <div className="studio-body">
         <aside className="library" aria-label="Library">

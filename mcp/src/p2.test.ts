@@ -12,6 +12,7 @@ import { startDashboard } from "./dashboard.js";
 import { DASHBOARD_HTML } from "./config.js";
 import { clone } from "./project.js";
 import { StudioClient } from "./studio-client.js";
+import { captureInput, captureRoute } from "./recording-diagnostics.js";
 
 function wav(peak = 4000) {
   const b = Buffer.alloc(44 + 4800 * 4); b.write("RIFF"); b.writeUInt32LE(b.length - 8, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(2, 22); b.writeUInt32LE(48000, 24); b.writeUInt32LE(192000, 28); b.writeUInt16LE(4, 32); b.writeUInt16LE(16, 34); b.write("data", 36); b.writeUInt32LE(b.length - 44, 40);
@@ -172,4 +173,89 @@ test("P2 studio rejects an old runtime command response after a newer session sn
   };
   const client=new StudioClient(request as typeof fetch);await client.refresh();const action=client.command({cmd:"preview.stop"},"Stop preview");
   await new Promise(r=>setImmediate(r));session="new-runtime";await client.refresh();release();assert.equal(await action,false);assert.match(client.getStatus().error!,/Runtime changed/);assert.equal(client.getStatus().message,"");
+});
+
+test("recording diagnostics distinguish silent PCM from nonzero recorder input and persist across reconnect", async t => {
+  const { app, engine, paths } = fixture(t);
+  engine.sclang.evalRoutine = async (code, operationId = "probe") => {
+    if (code.includes("~recBuf.close")) writeFileSync(app.rig.recPath, wav(0));
+    return { operationId, acknowledgement: "action", output: code.includes("~recBuf.close") ? `ABX_CAPTURE ${app.projectState().recordingState!.id} 0.25 2.5` : `ABX_ROUTE ${app.projectState().recordingState!.id} 90 101 102 103` };
+  };
+  assert.ok((await app.dispatch({ cmd: "record.start" })).ok);
+  const id = app.projectState().recordingState!.id;
+  const result = await app.dispatch({ cmd: "record.stop", value: id });
+  assert.ok(result.ok); if (result.ok) assert.match(result.msg, /although audio reached/);
+  const saved = new RecordingCatalog(paths.recordings).get(id)!;
+  assert.equal(saved.state, "ready"); assert.equal(saved.audio!.peak, 0);
+  assert.equal(saved.diagnostics!.sessionId, app.sessionId); assert.equal(saved.diagnostics!.probe, "captured");
+  assert.equal(saved.diagnostics!.input!.peak, 0.25); assert.equal(saved.diagnostics!.route!.bus, 90);
+  assert.ok(saved.diagnostics!.commands.some(c => c.command === "record.stop"));
+  assert.ok(new RecordingCatalog(paths.recordings).retrieve(id));
+});
+
+test("intentional silence stays ready and downloadable; missing probes are explicit and do not fail finalization", async t => {
+  const { app, engine } = fixture(t);
+  await app.dispatch({ cmd: "pause" });
+  engine.effect = async code => { if (code.includes("~recBuf.close")) writeFileSync(app.rig.recPath, wav(0)); };
+  await app.dispatch({ cmd: "record.start" }); const id = app.projectState().recordingState!.id;
+  assert.ok((await app.dispatch({ cmd: "record.stop", value: id })).ok);
+  const entry = app.recordings.get(id)!;
+  assert.equal(entry.state, "ready"); assert.equal(entry.diagnostics!.probe, "unavailable");
+  assert.match(entry.warning!, /contains silence/); assert.doesNotMatch(entry.warning!, /playback was active/);
+  assert.ok(app.recordings.retrieve(id));
+});
+
+test("silent playing project receives a review warning without declaring intentional rests invalid", async t => {
+  const { app, engine, send } = fixture(t);
+  await send("project.edit", { label: "Starter", edits: pocketGroove(app.project.document) });
+  await send("resume");
+  engine.effect = async code => { if (code.includes("~recBuf.close")) writeFileSync(app.rig.recPath, wav(0)); };
+  await send("record.start"); const id = app.projectState().recordingState!.id; await send("record.stop", { value: id });
+  const entry = app.recordings.get(id)!;
+  assert.match(entry.warning!, /If you expected music/); assert.equal(entry.state, "ready");
+  assert.equal(entry.diagnostics!.start.appliedRevision, app.project.document.revision);
+});
+
+test("diagnostic parsing cannot accept echoed expressions, invalid numbers or unrelated markers", () => {
+  assert.equal(captureInput('( "ABX_CAP" ++ "TURE take 0.5 2" ).postln', 'take'), undefined);
+  assert.equal(captureInput("ABX_CAPTURE take 1e999 1", "take"), undefined);
+  assert.equal(captureInput("ABX_CAPTURE take -1 2", "take"), undefined);
+  assert.deepEqual(captureInput("ABX_CAPTURE take 2.4e-05 2.504\r\n", "take"), { peak: 0.000024, seconds: 2.504 });
+  assert.equal(captureRoute("echo ABX_ROUTE take 1 2 3 4", "take"), undefined);
+});
+
+test("late recorder diagnostics from an older take cannot confirm the current take", () => {
+  assert.equal(captureInput("ABX_CAPTURE old 0.2 3 40", "current"), undefined);
+  assert.equal(captureRoute("ABX_ROUTE old 90 101 102 103 20", "current"), undefined);
+  assert.deepEqual(captureInput("ABX_CAPTURE old 0.2 3 40\nABX_CAPTURE current 0 2 70", "current"), { peak: 0, seconds: 2, events: 70 });
+});
+
+test("record start queued before a project switch cannot record the replacement project", async t => {
+  const { app, send } = fixture(t);
+  const switching = send("project.new"); const recording = app.dispatch({ cmd: "record.start" });
+  assert.ok((await switching).ok); assert.equal((await recording).ok, false);
+  assert.equal(app.recordings.list().length, 0);
+});
+
+test("a record command expiring behind other work never starts a late take", async t => {
+  const { app, engine } = fixture(t); let release!: () => void;
+  t.mock.timers.enable({ apis: ["Date"], now: 1000000 });
+  engine.effect = () => new Promise<void>(r => { release = r; });
+  const first = app.dispatch({ cmd: "boot" }); await first;
+  const busy = app.dispatch({ cmd: "eval_sc", value: "1.postln" }); await new Promise(r => setImmediate(r));
+  const late = app.dispatch({ cmd: "record.start", issuedAt: Date.now(), operationId: "late", sessionId: app.sessionId });
+  t.mock.timers.tick(Application.RETRY_MS + 1); engine.effect = async () => {}; release(); await busy;
+  const result = await late; assert.ok(!result.ok && result.code === "EXPIRED"); assert.equal(app.recordings.list().length, 0);
+});
+
+test("Studio pins Record to the displayed project revision and audio generation", async t => {
+  const { app } = fixture(t); let payload: any;
+  const request = async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url) === "/state") return new Response(JSON.stringify({ ...app.projectState(), sessionId: app.sessionId, generation: 7, status: "ready", slots: {} }));
+    payload = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ ok: true, sessionId: app.sessionId, generation: 7, msg: "Recording" }));
+  };
+  const client = new StudioClient(request as typeof fetch); await client.refresh();
+  assert.ok(await client.command({ cmd: "record.start" }, "Record"));
+  assert.equal(payload.expectedGeneration, 7); assert.equal(payload.projectId, app.project.document.id); assert.equal(payload.revision, app.project.document.revision);
 });

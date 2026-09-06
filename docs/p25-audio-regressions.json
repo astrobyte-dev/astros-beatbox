@@ -1,0 +1,65 @@
+{
+  "subsequentP2Passes": 3,
+  "baselineTests": 124,
+  "p2": {
+    "journey": {
+      "bytes": 485932,
+      "frames": 121472,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 2.530666666666667,
+      "peak": 8034,
+      "rms": 1306.4896211048379,
+      "sha256": "3a8d579f6a16338df845d198756b4062072e13adc4a25a2536270cb8043a836a"
+    },
+    "previewPhysical": {
+      "bytes": 223276,
+      "frames": 55808,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 1.1626666666666667,
+      "peak": 21299,
+      "rms": 5489.820691343591,
+      "sha256": "799ef75dc8bd5bddf93d2c699c5d24037ece1f6d86e9d179733f1dc9c7c56477"
+    },
+    "previewExcluded": {
+      "bytes": 199724,
+      "frames": 49920,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 1.04,
+      "peak": 0,
+      "rms": 0,
+      "sha256": "2bad360d73a25ef07faedb580ddc6ff4b6368c8b9b692e0fc7e49dcbcb75c5e6"
+    },
+    "auditionKeys": [
+      "bd/BT0A0A7.wav",
+      "sd/rytm-00-hard.wav",
+      "sd/rytm-01-classic.wav",
+      "bd/BT0A0A7.wav",
+      "sd/rytm-01-classic.wav",
+      "sd/rytm-00-hard.wav"
+    ],
+    "device": "System default"
+  },
+  "reconnect": {
+    "before": 0.188,
+    "disconnected": 0.201,
+    "reconnected": 0.164,
+    "generation": 0,
+    "recording": {
+      "bytes": 1146924,
+      "frames": 286720,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 5.973333333333334,
+      "peak": 8037,
+      "rms": 1375.5507367101156,
+      "sha256": "06d0ed6bc4ebfcf1ca5981ff3a2adaa82581438929203f8b5df1d1261859f81e"
+    }
+  },
+  "initialP2SilentTakeObserved": true,
+  "finalTests": 157,
+  "investigation": "p25-investigation-validation.json",
+  "silentTakeRootCause": "not established; not reproduced in investigation"
+}

@@ -21,6 +21,9 @@ export class ProcDriver extends EventEmitter {
   readonly generation = randomUUID();
   exited = false;
   exitCode: number | null = null;
+  startedAt: string | null = null;
+  get ownershipIdentity(): ProcessIdentity | undefined { return this.identity && { ...this.identity }; }
+  get health() { return { pid: this.pid ?? null, startedAt: this.startedAt, generation: this.generation, alive: !!this.pid && !this.exited, usable: this.running, exited: this.exited, exitCode: this.exitCode, error: this.stopping ? null : this.unavailable?.message ?? null }; }
 
   constructor(protected exe: string, protected args: string[] = [], protected env: NodeJS.ProcessEnv = process.env, protected spawnOpts: Record<string, unknown> = {}, private ownTree = false) { super(); }
 
@@ -28,6 +31,7 @@ export class ProcDriver extends EventEmitter {
     if (this.proc || this.unavailable) throw new Error("Driver already started or stopped; create a new generation.");
     this.proc = spawn(this.exe, this.args, { env: this.env, ...this.spawnOpts, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     this.proc.on("spawn", () => {
+      this.startedAt = new Date().toISOString();
       if (this.ownTree && process.platform === "win32" && this.proc?.pid && !this.exited) {
         try { this.identity = identifyOwnedProcess(this.proc.pid); }
         catch (e) { this.fail("process", `Cannot verify interpreter ownership: ${String(e)}`); this.proc.kill(); }
@@ -49,6 +53,7 @@ export class ProcDriver extends EventEmitter {
   private receive(stream: OutputStream, text: string): void {
     this.buf = (this.buf + text).slice(-256 * 1024);
     this.emit("output", text);
+    this.emit("log", { stream, text });
     this.lines[stream] += text;
     let end: number;
     while ((end = this.lines[stream].indexOf("\n")) >= 0) {

@@ -18,7 +18,10 @@
     "selftest:p2": "npm run build && node p2-selftest.mjs",
     "selftest:p2:live": "npm run build && node p2-selftest.mjs --live",
     "selftest:runtime:live": "npm run build && node runtime-live-selftest.mjs",
-    "runtime:stop": "node dist/runtime-control.js"
+    "runtime:stop": "node dist/runtime-control.js",
+    "launch": "node dist/launcher.js --open",
+    "selftest:system": "npm run build && node system-selftest.mjs",
+    "selftest:system:live": "npm run build && node system-live-selftest.mjs"
   },
   "engines": {
     "node": "24.14.0",

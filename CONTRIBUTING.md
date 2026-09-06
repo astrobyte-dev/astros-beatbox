@@ -93,6 +93,26 @@ Outfit and DM Sans are bundled locally, with no font CDN dependency.
 
 ## Gotchas worth knowing
 
+- **P2.5 System tests:** `npm run selftest:system` runs the production UI with fake
+  audio and a real Windows port conflict. `npm run selftest:system:live` runs the
+  Windows Script Host launcher, real audio restart/stop, second launch, external
+  TCP conflict, recording-safe Quit and OS inventory comparisons. Its WinEvent
+  observer fails on console-window show events; a human should also watch the
+  desktop. Run these Windows tests sequentially with other live tests.
+- **Real default-browser launch:** after building, run `node launcher-open-selftest.mjs`
+  from `mcp`. It exercises the root VBS launcher and actual Windows URL association
+  (opening a test tab), observes the Studio request, and requires zero console-show
+  events. This covers the browser branch omitted by the lifecycle test's `--no-open`.
+- **Recording timing proof:** `node recording-live-selftest.mjs` runs immediate
+  Record across project/mixer/lifecycle transitions, checks actual PCM plus input
+  and DSP diagnostics, and preserves intentional silence. Run sequentially with
+  audio tests. Raw logs, sidecars and process inventories stay ignored; commit
+  reviewed portable summaries only. See [TASK-2.5](tasks/TASK-2.5.md).
+- **Persistent owner versus child launch:** keep P2's detached Node runtime.
+  sclang uses `windowsHide` with `detached: false` on Windows; combining detached
+  process creation with no-window behavior caused visible terminal flashes.
+  Retest audio and MCP reconnect whenever changing launch options. The read-only
+  System inventory cannot grant termination rights; P0a handles still do cleanup.
 - **Headless SuperCollider** must schedule on `SystemClock` (not `fork`/`AppClock`, which don't
   tick when spawned by Node). See `superdirt_startup.scd`.
 - **No `var` inside a top-level `( )` block** in `.scd` files — it breaks the whole file's

@@ -1,0 +1,65 @@
+// Production Chromium UI with isolated storage and a fake audio lifecycle.
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { chromium } from "playwright";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+const dir = mkdtempSync(path.join(tmpdir(), "abx-system-ui-"));
+Object.assign(process.env, { TIDAL_METER_PORT: "0", TIDAL_PROJECTS_DIR: path.join(dir, "projects"), TIDAL_RECOVERY_DIR: path.join(dir, "recovery"), TIDAL_RECORDINGS_DIR: path.join(dir, "recordings") });
+const { startRuntime } = await import("./dist/runtime.js");
+const runtime = await startRuntime(0), { engine, app, health, logs } = runtime;
+const browser = await chromium.launch({ headless: true, executablePath: process.env.ABX_CHROMIUM || undefined });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors = [];
+page.on("pageerror", e => errors.push(String(e)));
+page.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+let restarts = 0, external;
+const wait = async predicate => { for (let i = 0; i < 200; i++) { if (await predicate()) return; await new Promise(r => setTimeout(r, 50)); } throw new Error("System UI wait timed out"); };
+try {
+  await page.goto(runtime.url + "/system"); await page.getByRole("heading", { name: "Ready when you are" }).waitFor();
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 1080 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: `../docs/p25-system-${width}.png`, fullPage: true });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const restart = page.getByRole("button", { name: "Restart audio", exact: true });
+  await restart.click(); await page.getByRole("dialog").waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), "Cancel");
+  await page.keyboard.press("Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Restart audio");
+  await page.keyboard.press("Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Cancel");
+  await page.keyboard.press("Escape"); assert.equal(await page.getByRole("dialog").count(), 0);
+  assert.equal(await restart.evaluate(el => el === document.activeElement), true, "dialog returns focus to invoking control");
+  engine.reboot = async () => { restarts++; engine.generation++; engine.state = "booting"; await new Promise(r => setTimeout(r, 1800)); engine.state = "idle"; };
+  const evaluate = async (_code, operationId) => ({ operationId, acknowledgement: "action", output: "" });
+  engine.tidal.eval = evaluate; engine.sclang.eval = evaluate; engine.sclang.evalRoutine = evaluate;
+  await restart.click(); await page.getByRole("dialog").getByRole("button", { name: "Restart audio", exact: true }).click();
+  await wait(() => restarts === 1); assert.equal(await page.getByRole("button", { name: "Stop audio", exact: true }).isDisabled(), true);
+  await wait(() => app.lifecycle.phase === "Complete"); await wait(() => restart.isEnabled());
+  assert.equal(restarts, 1);
+  await page.getByText("Astro’s Beatbox", { exact: true }).click(); await page.getByText("Beatbox-owned process", { exact: true }).waitFor();
+  logs.add("recording", "A take is ready"); logs.child("tidal", "stdout", "Loaded Tidal library\n", engine.generation);
+  await page.getByLabel("Source", { exact: true }).selectOption("recording"); await page.getByText("A take is ready", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Pause live logs", exact: true }).click();
+  logs.add("recording", "Paused entry"); await new Promise(r => setTimeout(r, 1400)); assert.equal(await page.getByText("Paused entry", { exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Resume live logs", exact: true }).click(); await page.getByText("Paused entry", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Clear visible logs" }).click(); await page.getByText("No activity in this view.", { exact: true }).waitFor();
+  await page.getByLabel("Developer diagnostics").check(); await page.getByLabel("Source", { exact: true }).selectOption("tidal");
+  logs.child("tidal", "stdout", "New interpreter diagnostic\n", engine.generation); await page.getByText("New interpreter diagnostic", { exact: true }).waitFor();
+  external = spawn(process.execPath, ["-e", "const s=require('node:dgram').createSocket('udp4');s.bind(57110,'127.0.0.1',()=>console.log('bound'));"], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const [output] = await once(external.stdout, "data"); assert.match(String(output), /bound/);
+  await health.inspection.refresh(true); await page.getByRole("heading", { name: "Needs attention" }).waitFor();
+  await page.getByRole("row").filter({ has: page.getByRole("cell", { name: "UDP 57110", exact: true }) }).getByRole("cell", { name: "PORT CONFLICT · not owned", exact: true }).waitFor();
+  assert.doesNotThrow(() => process.kill(external.pid, 0));
+  await page.screenshot({ path: "../docs/p25-system-conflict.png", fullPage: true });
+  const exited = once(external, "exit"); external.kill(); await exited; external = null; await health.inspection.refresh(true);
+  await page.getByRole("heading", { name: "Ready when you are" }).waitFor();
+  await page.getByRole("button", { name: "Quit Astro’s Beatbox", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Quit Astro’s Beatbox", exact: true }).click();
+  await page.getByRole("heading", { name: "See you next jam." }).waitFor();
+  await page.screenshot({ path: "../docs/p25-system-quit.png", fullPage: true });
+  await wait(async () => { try { await fetch(runtime.url + "/runtime"); return false; } catch { return true; } });
+  assert.deepEqual(errors, []);
+  console.log("SYSTEM BROWSER PASS: health/inventory, three widths, native confirmation focus trap/Escape/return, guarded controls and transitions, live source logs/pause/clear/diagnostics, real unowned UDP conflict, clean Quit; no JS/CSP errors.");
+} finally { external?.kill(); await browser.close(); runtime.close(); rmSync(dir, { recursive: true, force: true }); }

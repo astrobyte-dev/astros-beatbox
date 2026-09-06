@@ -8,6 +8,7 @@ const meta = {
   projectId: z.string().min(1).max(100).optional(),
   revision: z.number().int().nonnegative().safe().optional(),
   groupId: z.string().min(1).max(100).optional(),
+  expectedGeneration: z.number().int().nonnegative().optional(),
 };
 const slot = z.string().regex(/^d(?:[1-9]|1[0-6])$/);
 const code = z.string().trim().min(1).max(65536);
@@ -16,6 +17,7 @@ const layer = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd), slot }).
 export const commandSchema = z.union([
   bare("boot"),
   bare("preview.stop"), bare("record.start"),
+  ...["audio.stop", "audio.restart", "runtime.restart", "runtime.quit"].map(bare),
   z.object({ ...meta, cmd: z.literal("preview.play"), value: z.string().min(1).max(1024) }).strict(),
   z.object({ ...meta, cmd: z.literal("record.stop"), value: z.string().uuid() }).strict(),
   z.object({ ...meta, cmd: z.literal("sound.replace"), clipId: z.string().min(1).max(100), value: z.string().min(1).max(1024), projectId: z.string(), revision: z.number().int().nonnegative() }).strict(),
@@ -34,7 +36,7 @@ export const commandSchema = z.union([
   z.object({ ...meta, cmd: z.literal("setdevice"), value: z.string().max(512).refine((s) => !/[\r\n\0]/.test(s)) }).strict(),
 ]);
 // A compact wire type; runtime validation above narrows each command's fields.
-export interface Command { cmd: string; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
+export interface Command { cmd: string; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
 export type CommandResult = {
   operationId: string; sessionId: string; generation: number;
   projectId?: string; revision?: number; project?: ProjectDocument; history?: { undo: number; redo: number };

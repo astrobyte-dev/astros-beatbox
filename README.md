@@ -8,6 +8,9 @@ A free musical playground for Windows. **Play with sound.** Start a groove, chan
 
 ---
 
+P2.5 is complete. See [HANDOFF.md](HANDOFF.md) for the accepted checkpoint,
+new Windows laptop setup and next-task boundary. P3 has not started.
+
 ## Screenshots
 
 ![The new Astro's Beatbox studio](docs/p1-studio-1440.png)
@@ -28,6 +31,7 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 
 ## Features
 
+- **System:** one calm control center at `/system` for runtime health, owned processes, ports, recent logs, recording-safe audio restart and clean Quit. A second launch connects to the existing runtime.
 - **Studio:** named instruments, keyboard-accessible rhythm pads, painting, velocity, swing, contextual effects, independent mixing, generated code inspection, shared Undo/Redo, complete Save and My Jams.
 - **One curated starter:** Pocket groove, with kick, snare, hi-hat and clap. Browse and audition installed sound banks in Sounds, then Replace the selected visual instrument.
 - The following deeper tools remain available in the **classic dashboard**:
@@ -74,6 +78,23 @@ cd astros-beatbox/mcp
 npm ci
 npm run build
 ```
+
+After building, double-click **Launch Beatbox.vbs** in the project folder on Windows.
+It starts the existing persistent runtime headlessly and opens Studio. If Beatbox
+is already running, it opens that instance and says so. The **System** link in
+Studio leads to audio controls, process/port inspection and **Quit Astro’s Beatbox**.
+An unrelated port owner is reported and left running. `npm run launch` in `mcp`
+is the equivalent command for an already-open developer terminal.
+
+**Stop audio** keeps the jam but releases owned audio processes. **Restart audio**
+prepares them again and restores the prior transport state. **Restart services**
+also restarts telemetry while the persistent owner and HTTP connection stay in
+place. **Quit** finalizes recording, stops owned audio, closes telemetry/HTTP, and
+exits the owner. If cleanup fails, System stays available and reports the failure.
+Closing a browser or MCP connection continues to leave music and recording running.
+
+Developer diagnostics in System reveals captured interpreter output without
+opening consoles. See the [P2.5 implementation and validation report](docs/p25-runtime-control-center.md).
 
 ### Paths
 Paths now **auto-detect**: the project root resolves from the repo, `sclang.exe` is found

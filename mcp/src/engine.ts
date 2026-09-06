@@ -1,4 +1,5 @@
 import dgram from "node:dgram";
+import { EventEmitter } from "node:events";
 import type { DriverFault } from "./proc.js";
 import { existsSync, readFileSync } from "node:fs";
 import { Sclang } from "./sclang.js";
@@ -24,7 +25,7 @@ export async function assertAudioPortsFree(): Promise<void> {
 
 // Owns the long-lived SuperDirt + Tidal pair and boots them once (warm), so
 // every tool call after the first is sub-second.
-export class Engine {
+export class Engine extends EventEmitter {
   sclang = new Sclang();
   tidal = new Tidal();
   state: "idle" | "booting" | "ready" | "degraded" | "error" = "idle";
@@ -44,10 +45,14 @@ export class Engine {
     if (!loaded || loaded.hash !== asset.source.sha256 || loaded.index !== resolveSample(asset, DIRT_SAMPLES_DIR).index) throw new Error("The sound library changed after audio preparation. Reset audio before using this sound.");
   }
 
-  constructor(private checkPorts = assertAudioPortsFree) { this.observe(); }
+  audioInfo: { sampleRate: number; outputs: number; orbits: number } | null = null;
+  constructor(private checkPorts = assertAudioPortsFree) { super(); this.observe(); }
 
   private observe(): void {
     const generation = this.generation;
+    for (const [source, driver] of [["supercollider", this.sclang], ["tidal", this.tidal]] as const) {
+      driver.on("log", entry => { if (generation === this.generation) this.emit("log", { source, generation, ...entry }); });
+    }
     for (const driver of [this.sclang, this.tidal]) driver.on("fault", (fault: DriverFault) => {
       if (generation !== this.generation) return;
       this.error = fault.message; this.faultVersion++;
@@ -95,6 +100,9 @@ export class Engine {
         await this.installMaster(); check();
         await this.installScope(); check();
         await this.queryDevices(); check();
+        const info = await sc.eval('( "ABX_AUDIO" ++ "INFO " ++ s.sampleRate ++ " " ++ s.options.numOutputBusChannels ++ " " ++ ~dirt.orbits.size ).postln;', "audio-info"); check();
+        const match = /ABX_AUDIOINFO ([0-9.]+) (\d+) (\d+)/.exec(info.output);
+        this.audioInfo = match ? { sampleRate: +match[1], outputs: +match[2], orbits: +match[3] } : null;
         // Detect changes during boot as well as later replacement. Loaded buffer
         // ordering belongs to this engine generation, not a fresh UI directory scan.
         for (const sound of soundLibrary(DIRT_SAMPLES_DIR)) {
@@ -141,7 +149,7 @@ export class Engine {
       // `time` is the scheduled AUDIO onset; the OSCdef fires ~latency earlier, so
       // lead = time - now is how long until this event is actually heard (~0.25s).
       // Forwarding it lets the browser delay the playhead to match the sound exactly.
-      `OSCdef(\\hittap, {|msg, time| var orb = 0, cyc = -1, cpv = -1, lead = (time - SystemClock.seconds).max(0); msg.do { |it, ix| if(it.asString == "orbit") { orb = msg[ix+1] }; if(it.asString == "cycle") { cyc = msg[ix+1] }; if(it.asString == "cps") { cpv = msg[ix+1] } }; NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("HIT " ++ orb); if(cyc >= 0) { NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("CLK " ++ cyc.round(0.0001) ++ " " ++ cpv.round(0.0001) ++ " " ++ lead.round(0.0001)) } }, '/dirt/play'); ` +
+      `~abxEventCount = 0; OSCdef(\\hittap, {|msg, time| var orb = 0, cyc = -1, cpv = -1, lead = (time - SystemClock.seconds).max(0); ~abxEventCount = ~abxEventCount + 1; msg.do { |it, ix| if(it.asString == "orbit") { orb = msg[ix+1] }; if(it.asString == "cycle") { cyc = msg[ix+1] }; if(it.asString == "cps") { cpv = msg[ix+1] } }; NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("HIT " ++ orb); if(cyc >= 0) { NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("CLK " ++ cyc.round(0.0001) ++ " " ++ cpv.round(0.0001) ++ " " ++ lead.round(0.0001)) } }, '/dirt/play'); ` +
       `s.sync;`;
     await this.sclang.evalRoutine(code, "install-master", 15000);
   }
@@ -202,6 +210,7 @@ export class Engine {
   }
 
   stop(): void {
+    this.audioInfo = null;
     this.generation++;
     this.fatal = true;
     this.error = "Engine stopped; Reset to start a new generation.";

@@ -1,7 +1,7 @@
 // One complete production-browser journey, run with deterministic fake audio or
 // --live for the owned Windows engine. Live tests must run sequentially.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, cpSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { once } from "node:events";
@@ -31,6 +31,8 @@ const server=startDashboard(0,path.resolve("dashboard.html"),state,()=>({cycle:m
 await once(server,"listening");
 const url=`http://127.0.0.1:${server.address().port}`;
 let browser,page;
+const telemetry=[];
+const sampling=live?setInterval(()=>{telemetry.push({at:Date.now(),generation:engine.generation,revision:app.project.document.revision,recording:app.rig.recording,left:meter.l,right:meter.r,meterAt:meter.lastUpdate,cycle:meter.cycle,cycleAt:meter.cycleAt,hits:{...meter.hits},scopes:structuredClone(meter.scopes)});if(telemetry.length>3000)telemetry.shift();},50):null;
 const wait=async(fn)=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw new Error("Journey condition timed out");};
 const sync=async()=>{await page.waitForFunction(rev=>document.querySelector(".studio-app")?.dataset.revision===String(rev),app.project.document.revision);await page.waitForFunction(()=>!document.querySelector(".feedback").textContent.includes("waiting for confirmation"));};
 const send=async(cmd,args={})=>{const p=app.project.document;const r=await app.dispatchExternal({cmd,projectId:p.id,revision:p.revision,...args});assert.ok(r.ok,JSON.stringify(r));return r;};
@@ -59,7 +61,9 @@ try {
   // Preview during a take exercises the real separation, not just a disabled UI.
   await page.getByRole("button",{name:"Sounds",exact:true}).click();await page.getByRole("button",{name:`Preview ${choice.label} ${choice.file}`,exact:true}).click();await sync();
   await new Promise(r=>setTimeout(r,live?2200:200));await page.getByRole("button",{name:"Finish recording",exact:true}).click();await wait(()=>app.recordings.get(take)?.state==="ready");await sync();
-  const entry=app.recordings.get(take);assert.ok(entry.audio.peak>0);const audio=page.locator(`li[data-recording-id="${take}"] audio`);await audio.waitFor();
+  const entry=app.recordings.get(take);assert.ok(entry.audio.peak>0,"Pocket groove must contain musical audio; a valid silent WAV does not pass");
+  if(live){assert.equal(entry.diagnostics.probe,"captured");assert.ok(entry.diagnostics.input.peak>0);assert.ok(entry.diagnostics.input.seconds>2);}
+  const audio=page.locator(`li[data-recording-id="${take}"] audio`);await audio.waitFor();
   await audio.evaluate(async el=>{await el.play();});await page.waitForFunction(id=>document.querySelector(`li[data-recording-id="${id}"] audio`)?.currentTime>0,take);await audio.evaluate(el=>el.pause());
   const downloadEvent=page.waitForEvent("download");await page.locator(`li[data-recording-id="${take}"]`).getByRole("link",{name:"Download WAV"}).click();const download=await downloadEvent;const downloaded=await download.path();assert.deepEqual(readFileSync(downloaded),readFileSync(app.rig.recPath));
   await page.screenshot({path:`../docs/p2-recordings${live?"-live":""}.png`,fullPage:true});
@@ -72,7 +76,7 @@ try {
     // Capture physical bus 0 after the preview group as a simultaneous probe,
     // while the application recorder captures only the pre-preview mix tap.
     const physical=path.join(dir,"physical.wav").replace(/\\/g,"/");
-    await engine.sclang.evalRoutine(`~probeBuf = Buffer.alloc(s,65536,2); s.sync; ~probeBuf.write("${physical}","wav","int16",0,0,true); s.sync; ~probeSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf,~probeBuf.bufnum,\\bus,0]); s.sync;`,"physical-probe");
+    await engine.sclang.evalRoutine(`SynthDef(\\diskrec, { |buf, bus| DiskOut.ar(buf, In.ar(bus,2)) }).add; ~probeBuf = Buffer.alloc(s,65536,2); s.sync; ~probeBuf.write("${physical}","wav","int16",0,0,true); s.sync; ~probeSynth = Synth.tail(RootNode(s), \\diskrec, [\\buf,~probeBuf.bufnum,\\bus,0]); s.sync;`,"physical-probe");
     await send("record.start");const exclusion=app.projectState().recordingState.id;
     // Switch before these samples finish, including mono and stereo synth paths.
     const kick=app.sounds().find(s=>s.bank==="bd");assert.ok(kick);
@@ -82,11 +86,29 @@ try {
     await engine.sclang.evalRoutine("~probeSynth.free; s.sync; ~probeBuf.close; s.sync; ~probeBuf.free; s.sync;","physical-finalize");
     const excluded=app.recordings.get(exclusion).audio, audible=validateWav(physical);
     assert.ok(audible.peak>100,"preview must reach physical output");assert.equal(excluded.peak,0,"preview must be completely absent from application recording");
+    assert.equal(app.recordings.get(exclusion).diagnostics.input.peak,0,"Preview must also be absent at DiskOut input");
+    await page.getByRole("button",{name:"Recordings",exact:true}).click();
+    await page.locator(`li[data-recording-id="${exclusion}"]`).getByText("Silent WAV saved",{exact:true}).waitFor();
     copyFileSync(physical,"../recordings/p2-validation/preview-output.wav");copyFileSync(app.rig.recPath,"../recordings/p2-validation/preview-excluded.wav");
     writeFileSync("../docs/p2-audio-measurements.json",JSON.stringify({journey:entry.audio,previewPhysical:audible,previewExcluded:excluded,auditionKeys,device:engine.currentDevice},null,2)+"\n");
     console.log("P2 LIVE preview output / excluded recording:",JSON.stringify({audible,excluded}));
+    mkdirSync("../recordings/p25-investigation",{recursive:true});
+    writeFileSync(`../recordings/p25-investigation/p2-${Date.now()}.json`,JSON.stringify({takes:app.recordings.list(),telemetry},null,2));
   }
   assert.deepEqual(errors,[]);assert.equal(engine.error,null);
   console.log(`P2 ${live?"LIVE":"FAKE"} BROWSER PASS: starter -> rhythm -> Preview -> Replace -> Undo/Redo -> Save -> reopen -> frontend reconnect -> Record/Preview -> finalize -> playback/download -> catalog after Undo/reload; three desktop widths; no JS/CSP errors.`);
-} catch(e) {if(page)await page.screenshot({path:"../docs/p2-failure.png",fullPage:true});console.error("P2 state:",JSON.stringify(state()));throw e;}
-finally {await browser?.close();server.close();server.closeAllConnections();meter?.stop();engine.stop();if(live){const {assertAudioPortsFree}=await import("./dist/engine.js");await assertAudioPortsFree();}rmSync(dir,{recursive:true,force:true});}
+} catch(e) {
+  if(page)await page.screenshot({path:"../docs/p2-failure.png",fullPage:true});
+  console.error("P2 state:",JSON.stringify(state()));
+  if(live) {
+    console.error("P2 meter:",JSON.stringify({left:meter.l,right:meter.r,lastUpdate:meter.lastUpdate,hits:meter.hits}));
+    console.error("P2 Tidal output:",engine.tidal.tail(12000));
+    console.error("P2 SuperCollider output:",engine.sclang.tail(12000));
+    const evidence=`../recordings/p25-investigation/failure-${Date.now()}`;
+    cpSync(dir,evidence,{recursive:true});
+    writeFileSync(path.join(evidence,"diagnostics.json"),JSON.stringify({state:state(),telemetry,tidal:engine.tidal.tail(64000),supercollider:engine.sclang.tail(64000)},null,2));
+    console.error("P2 failure evidence preserved:",path.resolve(evidence));
+  }
+  throw e;
+}
+finally {if(sampling)clearInterval(sampling);await browser?.close();server.close();server.closeAllConnections();meter?.stop();engine.stop();if(live){const {assertAudioPortsFree}=await import("./dist/engine.js");await assertAudioPortsFree();}rmSync(dir,{recursive:true,force:true});}

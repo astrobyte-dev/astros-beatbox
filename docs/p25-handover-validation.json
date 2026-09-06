@@ -1,0 +1,239 @@
+{
+  "date": "2026-09-07",
+  "platform": "win32",
+  "completeSuite": {
+    "passed": 157,
+    "failed": 0,
+    "skipped": 0
+  },
+  "productionBuild": "passed",
+  "typechecks": "server and Studio passed",
+  "p2Live": {
+    "journey": {
+      "bytes": 486188,
+      "frames": 121536,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 2.532,
+      "peak": 8034,
+      "rms": 1418.8155510167871,
+      "sha256": "aa9b9cd747cc2f72da48b713bd719eafc88666fbfdb48881a3fb4a5e7968438c"
+    },
+    "previewPhysical": {
+      "bytes": 233004,
+      "frames": 58240,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 1.2133333333333334,
+      "peak": 21299,
+      "rms": 5377.11764008365,
+      "sha256": "b2ebce042407197ade9b55458e65483de9e010fc0d321dee73a112d760bcf380"
+    },
+    "previewExcluded": {
+      "bytes": 205868,
+      "frames": 51456,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 1.072,
+      "peak": 0,
+      "rms": 0,
+      "sha256": "0dcf580f5f74465642419ae9f8c56ea2cb4116d8d2c37f4ee4e3dcd45c50f1f0"
+    },
+    "auditionKeys": [
+      "bd/BT0A0A7.wav",
+      "sd/rytm-00-hard.wav",
+      "sd/rytm-01-classic.wav",
+      "bd/BT0A0A7.wav",
+      "sd/rytm-01-classic.wav",
+      "sd/rytm-00-hard.wav"
+    ],
+    "device": "System default"
+  },
+  "persistentReconnect": {
+    "before": 0.18,
+    "disconnected": 0.246,
+    "reconnected": 0.236,
+    "generation": 0,
+    "recording": {
+      "bytes": 1154348,
+      "frames": 288576,
+      "sampleRate": 48000,
+      "channels": 2,
+      "duration": 6.012,
+      "peak": 8043,
+      "rms": 1371.1523507076763,
+      "sha256": "b1209657491e29950c7a06d4cba0abfb04c4764f8a2cb319c8ebd1fe1ecc1f28"
+    }
+  },
+  "recordingTiming": {
+    "takes": 13,
+    "expectedMusic": 10,
+    "intentionalSilence": 3,
+    "scenarios": [
+      {
+        "label": "cold preparation while stopped",
+        "expectedSignal": false,
+        "pcmPeak": 0,
+        "input": {
+          "peak": 0,
+          "seconds": 0.64800000190735,
+          "events": 0
+        }
+      },
+      {
+        "label": "immediate first Play",
+        "expectedSignal": true,
+        "pcmPeak": 8401,
+        "input": {
+          "peak": 0.25638219714165,
+          "seconds": 2.5480000972748,
+          "events": 18
+        }
+      },
+      {
+        "label": "project switch 1",
+        "expectedSignal": true,
+        "pcmPeak": 8034,
+        "input": {
+          "peak": 0.24519941210747,
+          "seconds": 2.7013332843781,
+          "events": 38
+        }
+      },
+      {
+        "label": "mixer restore 1",
+        "expectedSignal": true,
+        "pcmPeak": 8036,
+        "input": {
+          "peak": 0.2452400624752,
+          "seconds": 2.5386667251587,
+          "events": 57
+        }
+      },
+      {
+        "label": "project switch 2",
+        "expectedSignal": true,
+        "pcmPeak": 8041,
+        "input": {
+          "peak": 0.24540393054485,
+          "seconds": 2.7119998931885,
+          "events": 76
+        }
+      },
+      {
+        "label": "mixer restore 2",
+        "expectedSignal": true,
+        "pcmPeak": 8034,
+        "input": {
+          "peak": 0.24519881606102,
+          "seconds": 2.5586667060852,
+          "events": 96
+        }
+      },
+      {
+        "label": "project switch 3",
+        "expectedSignal": true,
+        "pcmPeak": 8034,
+        "input": {
+          "peak": 0.24520197510719,
+          "seconds": 2.7013332843781,
+          "events": 115
+        }
+      },
+      {
+        "label": "mixer restore 3",
+        "expectedSignal": true,
+        "pcmPeak": 8036,
+        "input": {
+          "peak": 0.24525415897369,
+          "seconds": 2.5586667060852,
+          "events": 134
+        }
+      },
+      {
+        "label": "project switch 4",
+        "expectedSignal": true,
+        "pcmPeak": 8035,
+        "input": {
+          "peak": 0.24522338807583,
+          "seconds": 2.7306666374207,
+          "events": 156
+        }
+      },
+      {
+        "label": "mixer restore 4",
+        "expectedSignal": true,
+        "pcmPeak": 8035,
+        "input": {
+          "peak": 0.24523501098156,
+          "seconds": 2.5520000457764,
+          "events": 174
+        }
+      },
+      {
+        "label": "immediate audio restart",
+        "expectedSignal": true,
+        "pcmPeak": 8448,
+        "input": {
+          "peak": 0.25784122943878,
+          "seconds": 2.5586667060852,
+          "events": 19
+        }
+      },
+      {
+        "label": "intentional stopped silence",
+        "expectedSignal": false,
+        "pcmPeak": 0,
+        "input": {
+          "peak": 0,
+          "seconds": 0.64933335781097,
+          "events": 19
+        }
+      },
+      {
+        "label": "intentional all-muted silence",
+        "expectedSignal": false,
+        "pcmPeak": 0,
+        "input": {
+          "peak": 0,
+          "seconds": 0.64266663789749,
+          "events": 40
+        }
+      }
+    ]
+  },
+  "systemBrowser": "passed",
+  "windowsLifecycle": {
+    "passed": true,
+    "consoleShowEvents": 0,
+    "evidence": "p25-windows-validation.json"
+  },
+  "defaultBrowser": {
+    "passed": true,
+    "browser": "Opera GX",
+    "consoleShowEvents": 0,
+    "evidence": "p25-browser-launch-measurements.json"
+  },
+  "browserRegressions": {
+    "classic": "passed",
+    "studio": "passed",
+    "p2": "passed",
+    "system": "passed",
+    "javascriptOrCspErrors": 0
+  },
+  "cleanIndexExport": {
+    "npmCi": "passed",
+    "productionBuild": "passed",
+    "testsPassed": 157,
+    "testsFailed": 0,
+    "testsSkipped": 0,
+    "serverAndStudioTypechecks": "passed",
+    "copiedLocalDependenciesOrRuntimeState": false
+  },
+  "finalReview": {
+    "everyModifiedAndUntrackedFileReviewed": true,
+    "whitespaceCheck": "passed",
+    "noSecretsOrMachineSpecificUserPathsInCandidate": true,
+    "noP3": true
+  }
+}
