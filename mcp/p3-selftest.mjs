@@ -57,6 +57,9 @@ try {
   observe(11.99); assert.equal(app.performance.sceneId, grooveId); observe(12); await page.getByText('Lift · Current', { exact: true }).waitFor(); assert.equal(calls.filter(c => c.includes('abxInstall')).length, count);
   await click('Stop performance'); await click('Duplicate scene'); await sceneName.fill('Drop'); await sceneName.press('Enter'); await sync();
   const drop = app.project.document.scenes.find(s => s.name === 'Drop');
+  const deletedId = app.project.document.scenes.find(s => s.name === 'D').id;
+  await click('Edit scene D'); await click('Delete scene'); assert.ok(!app.project.document.scenes.some(s => s.id === deletedId));
+  await page.getByRole('button', { name: 'Undo: Delete scene', exact: true }).click(); await sync(); assert.ok(app.project.document.scenes.some(s => s.id === deletedId)); await click('Edit scene Drop');
   await page.getByText('Arrange your sections', { exact: false }).click();
   for (const name of ['Groove', 'Lift', 'Drop']) { await click('Edit scene ' + name); await click('+ Add ' + name); }
   const repeats = page.getByRole('spinbutton', { name: 'Entry 2 repeats' }); await repeats.fill('2'); await repeats.press('Tab'); await sync();

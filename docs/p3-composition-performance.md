@@ -101,12 +101,14 @@ mixing never rewrites code. Dependency selection is available in Studio; declara
 creation uses the existing structured `dependencies.set` API. Retained declaration
 source is never executed automatically. Arbitrary code is not reverse-engineered.
 
-Raw SC, untracked Tidal and raw mutation during performance mark the session
+Raw SC, untracked Tidal/set imports and raw mutation during performance mark the session
 **Externally modified**. Authored edits are retained without automatic reconciliation
 into external playback. Launch/resume and project switching are refused until an
 explicit Return to managed project. That action finalizes an active recording before
 rebooting the owned audio engine, clearing unknown interpreter/SC state, and restoring
-managed playback. Simple top-level d-slot/tempo operations outside performance retain
+managed playback. An explicit Reset/Restart also clears external-state uncertainty after the owned
+engine has actually rebooted, retaining the previous stopped/playing contract.
+Recognized top-level d-slot/tempo operations, including tracked `do` batches, outside performance retain
 the legacy bounded tracking contract; they are not arbitrary-code introspection.
 
 ## Studio, accessibility and MCP
@@ -139,7 +141,7 @@ were introduced.
 Baseline: 177 discovered, 174 passed, three Windows-only skips; build, both typechecks,
 classic/Studio/P2/System browser journeys and the Linux Node runtime harness passed.
 
-P3 adds 26 tests: domain independence/reference safety/history; exact boundaries;
+P3 adds 27 tests: domain independence/reference safety/history; exact boundaries;
 multi-track batches and missing acknowledgements; repeat deduplication; stale project
 rejection; obsolete queues; finite/looped/silent arrangements; observations with no
 clients; tempo changes; snapshot edits; restart mix/tempo; canonical automation
@@ -159,7 +161,9 @@ Review fixes include project-switch cancellation versus deletion guards, overrid
 base gain, missing scheduling acknowledgements, failed clock observations, preserved
 restart mix/tempo, raw mutation during performance, native boot helper verification,
 repeat-input stale-revision capture, and a newline separating preserved managed
-code from generated routing so trailing line comments cannot swallow the suffix. Retained Studio/P2 and recording-ordering
+code from generated routing so trailing line comments cannot swallow the suffix.
+Review of the retained P0a native harness also corrected overly strict classification
+of tracked `do` batches and explicit Reset restoration after external work. Retained Studio/P2 and recording-ordering
 harnesses now explicitly Play after verifying the new reopen-stopped contract;
 recording, non-silence, reconnect, Pause and cleanup assertions remain intact.
 
@@ -195,7 +199,7 @@ Added: `tasks/TASK-3.md`, `mcp/src/performance.ts`, `mcp/src/p3.test.ts`,
 `docs/p3-performance-1440.png`.
 
 Modified: `mcp/src/project.ts`, `project-compiler.ts`, `application.ts`,
-`commands.ts`, `server.ts`, `tidal.ts`, `studio-client.ts`, `mcp.test.ts`;
+`commands.ts`, `server.ts`, `tidal.ts`, `track.ts`, `studio-client.ts`, `mcp.test.ts`;
 `tidal/BootTidal.hs`; Studio `App.tsx`/`style.css`; `mcp/dashboard-project.js`;
 `mcp/package.json`, `run-tests.mjs`, `studio-selftest.mjs`, `p2-selftest.mjs`,
 `recording-live-selftest.mjs`; CI; README, CONTRIBUTING and HANDOFF.

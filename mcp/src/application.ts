@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { validateCommand, requiresProjectRevision, type Command, type CommandResult } from "./commands.js";
-import { track, scStr, type RigState } from "./track.js";
+import { track, isTrackedTidal, scStr, type RigState } from "./track.js";
 import type { EvalResult } from "./protocol.js";
 import { ProjectService, ProjectConflict } from "./project-service.js";
 import { ProjectStorage } from "./project-storage.js";
@@ -308,7 +308,7 @@ export class Application {
       await this.changeProject(this.project.prepare(edits), c, id); return { msg: c.cmd + " " + (c.slot ?? "") };
     }
     if ((c.cmd === "eval" || c.cmd === "eval_sc" || c.cmd === "load") && this.performanceDocument) { this.external = true; this.clearPerformance(); this.runtime.song = false; this.rig.synchronized = false; this.runtime.appliedRevision = null; }
-    if (c.cmd === "eval_sc" || c.cmd === "eval" && !/^\s*(?:d(?:[1-9]|1[0-6])\s+(?:\$[^;]+|silence)|hush|setcps\s+\([0-9./* +()-]+\))\s*;?\s*$/.test(String(c.value))) {
+    if (c.cmd === "eval_sc" || c.cmd === "eval" && !isTrackedTidal(String(c.value))) {
       this.external = true; this.clearPerformance(); this.runtime.song = false; this.rig.synchronized = false; this.runtime.appliedRevision = null;
     }
     const musical = ["eval", "hush", "silence", "tempo", "mute", "unmute", "solo", "unsolo", "load"].includes(c.cmd);
@@ -523,7 +523,7 @@ export class Application {
         this.transition(c.cmd, "Restarting telemetry");
         await this.lifecycleHooks.restartServices?.();
       }
-      await this.engine.reboot(); this.rig.recording = false; this.recorderUncertain = false;
+      await this.engine.reboot(); this.external = false; this.rig.recording = false; this.recorderUncertain = false;
       await this.restore(id);
     } else {
       this.transition(c.cmd, "Stopping owned audio processes");
@@ -566,7 +566,7 @@ export class Application {
       }
       if (c.cmd === "setdevice") { mkdirSync(path.dirname(this.paths.device), { recursive: true }); writeFileSync(this.paths.device, String(c.value).trim(), "utf8"); }
       r.synchronized = false;
-      await this.engine.reboot(); r.recording = false; this.recorderUncertain = false; await this.restore(id);
+      await this.engine.reboot(); this.external = false; r.recording = false; this.recorderUncertain = false; await this.restore(id);
       if (recordingFailure) throw new Error("Engine restarted and patterns restored. " + recordingFailure);
       return { msg: "engine restarted; patterns and mute/solo settings restored" };
     }
@@ -611,9 +611,9 @@ export class Application {
         const saved = { ...r.slots }, bpm = r.tempoBpm;
         await this.tidal("hush", id);
         const next: LiveRig = { ...r, slots: {}, muted: new Set(), solo: null, stopped: false, paused: false };
-        try { for (const line of lines) { await this.tidal(line, id); track(next, line); } }
+        try { for (const line of lines) { if (!isTrackedTidal(line)) this.external = true; await this.tidal(line, id); track(next, line); } }
         catch (e) { r.slots = saved; r.tempoBpm = bpm; try { await this.restore(id); } catch { r.synchronized = false; } throw new Error("Set load failed; previous set retained. " + String(e)); }
-        Object.assign(r, next); r.synchronized = true; return { msg: "loaded set: " + c.value };
+        Object.assign(r, next); r.synchronized = !this.external; return { msg: "loaded set: " + c.value };
       }
       default: throw new Error("Unsupported command " + c.cmd);
     }

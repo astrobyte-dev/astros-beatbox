@@ -17,19 +17,20 @@ export function Composition({ state, disabled, performing, onPerform }: { state:
     <p className="performance-status" role="status">{live?.clock === "unavailable" ? "Musical clock unavailable · playback position unconfirmed" : live?.queuedSceneId ? `${name(live.queuedSceneId)} · Next cycle` : live?.ended ? "Arrangement finished · silence" : live?.sceneId ? `${name(live.sceneId)} · Current${live.repeat ? ` · repeat ${live.repeat}` : ""}` : "Choose a section. Launch when you’re ready."}</p>
     <div className="scene-strip">
       {p.sceneOrder.map(id => { const scene = p.scenes.find(s => s.id === id)!, silence = p.tracks.some(t => !scene.clips[t.id]); return <div className={`scene-card ${selected.id === id ? "selected" : ""}`} key={id}>
-        <button className="scene-name" disabled={disabled} aria-pressed={selected.id === id} aria-label={`${performing ? "Perform" : "Edit"} scene ${scene.name}`} onClick={() => performing ? launch(id) : void client.edit([{ type: "scene.activate", sceneId: id }], "Select scene")}>{scene.name}</button>
-        <span>{live?.queuedSceneId === id ? "Next cycle" : live?.sceneId === id ? "Current" : selected.id === id ? "Editing" : "Ready"}{silence ? " · intentional silence" : ""}</span>
+        <button className="scene-name" disabled={disabled} aria-pressed={state.workspace.selectedSceneId === id} aria-label={`${performing ? "Perform" : "Edit"} scene ${scene.name}`} onClick={() => performing ? launch(id) : void client.edit([{ type: "scene.activate", sceneId: id }], "Select scene")}>{scene.name}</button>
+        <span>{live?.queuedSceneId === id ? "Next cycle" : live?.sceneId === id ? "Current" : state.workspace.selectedSceneId === id ? "Editing" : "Ready"}{silence ? " · intentional silence" : ""}</span>
         <button disabled={disabled || live?.queuedSceneId === id} aria-label={`Launch ${scene.name}`} onClick={() => launch(id)}>↗ Launch</button>
       </div>; })}
       <button className="add-scene" disabled={disabled} onClick={() => { const id = crypto.randomUUID(); void client.edit([{ type: "scene.create", sceneId: id, name: "New section" }, { type: "scene.activate", sceneId: id }], "Create scene"); }}>+ Section</button>
     </div>
+    {state.workspace.selectedSceneId === null && <p className="notice">The editing rhythm is outside the named sections. Choose a section, or capture this rhythm into the section below.</p>}
     {!performing && <div className="scene-tools">
       <EditableText label="Scene name" value={selected.name} disabled={disabled} onCommit={(name, base) => void client.edit([{ type: "scene.rename", sceneId: selected.id, name }], "Rename scene", base)} />
       <button disabled={disabled} onClick={duplicate}>Duplicate scene</button>
       <button disabled={disabled} onClick={() => void client.edit([{ type: "scene.capture", sceneId: selected.id }], "Capture scene")}>Capture editing rhythm</button>
       <button disabled={disabled || p.sceneOrder[0] === selected.id} aria-label="Move scene earlier" onClick={() => void client.edit([{ type: "scene.order", ids: move(p.sceneOrder, selected.id, -1) }], "Reorder scenes")}>←</button>
       <button disabled={disabled || p.sceneOrder.at(-1) === selected.id} aria-label="Move scene later" onClick={() => void client.edit([{ type: "scene.order", ids: move(p.sceneOrder, selected.id, 1) }], "Reorder scenes")}>→</button>
-      <button disabled={disabled || p.scenes.length === 1} onClick={async () => { if (await client.edit([{ type: "scene.delete", sceneId: selected.id }], "Delete scene")) heading.current?.focus(); }}>Delete scene</button>
+      <button disabled={disabled || p.scenes.length === 1} onClick={async () => { if (await client.edit([{ type: "scene.delete", sceneId: selected.id }, { type: "scene.activate", sceneId: p.sceneOrder.find(id => id !== selected.id)! }], "Delete scene")) heading.current?.focus(); }}>Delete scene</button>
     </div>}
     <div className="performance-actions"><button disabled={disabled} onClick={() => launch(selected.id, true)}>Repeat {selected.name}</button><button disabled={disabled} onClick={() => void client.command({ cmd: "stop" }, "Stop performance")}>Stop performance</button><button disabled={disabled} onClick={() => void client.command({ cmd: "performance.return" }, "Return to editing rhythm")}>Hear editing rhythm</button></div>
     {live?.mode !== "manual" && live && state.projectRuntime.appliedRevision !== p.revision && <p className="notice">Your edits are saved in this jam. Relaunch a section or the arrangement to hear the updated composition. Mix and tempo changes are live.</p>}

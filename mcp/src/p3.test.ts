@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Application, type CommandEngine } from "./application.js";
@@ -208,4 +208,16 @@ test("P3 scene model accepts existing synth assets and managed code without samp
   let p = groove(); const asset = p.assets[0]; p.assets[0] = { ...asset, kind: "synth", name: "supersaw", reference: "supersaw" };
   p = applyEdits(p, [{ type: "scene.duplicate", sceneId: p.scenes[0].id, newSceneId: "synth-section", name: "Synth section" }]);
   assert.match(compileClip(p, p.clips[0]), /supersaw/); assert.equal(p.scenes.find(s => s.id === "synth-section")!.clips[p.tracks[0].id] !== null, true);
+});
+test("P3 preserves P0a tracked do batches and explicit Reset after external work", async t => {
+  const { app, send, dir } = fixture(t);
+  assert.equal((await send("eval", { value: 'do { setcps (120/60/4); d1 $ s "bd*4" # gain 0.8; d2 $ s "~ cp" # gain 0.5 }' })).ok, true);
+  assert.equal(app.projectState().projectRuntime.externallyModified, false); const slots = { ...app.rig.slots };
+  await send("stop"); assert.equal((await send("resume")).ok, true); assert.deepEqual(app.rig.slots, slots);
+  await send("eval", { value: "let p0aValue = 42" }); assert.equal(app.projectState().projectRuntime.externallyModified, true);
+  await send("stop"); assert.equal((await send("reset")).ok, true); assert.equal(app.rig.stopped, true); assert.deepEqual(app.rig.slots, slots); assert.equal(app.projectState().projectRuntime.externallyModified, false);
+  assert.equal((await send("resume")).ok, true);
+  writeFileSync(path.join(dir, "external.tidal"), 'let imported = 42\nd1 $ s "bd"\n');
+  assert.equal((await send("load", { value: "external" })).ok, true);
+  assert.equal(app.projectState().projectRuntime.externallyModified, true); assert.equal(app.rig.synchronized, false);
 });

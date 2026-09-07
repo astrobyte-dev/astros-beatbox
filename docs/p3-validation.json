@@ -17,11 +17,11 @@
     "linuxRuntime": "passed"
   },
   "automated": {
-    "discovered": 203,
-    "passed": 200,
+    "discovered": 204,
+    "passed": 201,
     "skipped": 3,
     "failed": 0,
-    "newP3Tests": 26,
+    "newP3Tests": 27,
     "skips": "existing native Windows-only tests",
     "build": "passed",
     "serverTypecheck": "passed",
@@ -53,7 +53,8 @@
     "failed drafts and declarations retained through recovery",
     "external state blocks implicit overwrite",
     "stale arrangement repeat draft rejected in browser",
-    "historical Windows screenshots preserved"
+    "historical Windows screenshots preserved",
+    "P0a tracked do batches retain Stop/Play and explicit Reset clears external uncertainty after reboot"
   ],
   "p26Status": {
     "level": "B \u2014 Ubuntu Runtime Safe",
