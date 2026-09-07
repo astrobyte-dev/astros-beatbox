@@ -53,6 +53,23 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 
 ---
 
+## Jam & Exploration (P4)
+
+Open **Jam ✳** in Studio to keep favorite instruments, make related seeded
+variations, compare ideas, twist semantic macros and save independent clips as
+scenes. Start From Groove, Start Minimal or Surprise Me gets an empty project
+playing through the normal audio runtime. Undo and deeper Studio editing stay close.
+
+Locks persist with the project, including any macro contribution held when a
+control was locked. Macros preserve base values, automation and modulation; release
+a gesture to apply it (synth changes arrive on new notes). Keep This marks a session
+idea; Save jam persists the current project. Scene instruments/FX/macros stay shared.
+The optional performance notebook preserves event order, with no automatic replay.
+
+P4 is stacked on P3.5B. [Architecture, full validation and remaining gates](docs/p4-jam-exploration.md).
+Ubuntu implementation/runtime validation passes; native audio/musical quality and
+all inherited Windows gates remain pending. P5 has not begun.
+
 ## Capture & Sampling Lab (P3.5B)
 
 In Studio, open **My Sounds → Add Files / Add Folder**, review the selection, then

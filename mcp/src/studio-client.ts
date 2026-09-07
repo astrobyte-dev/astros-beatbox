@@ -3,6 +3,7 @@ import type { Command, CommandResult } from "./commands.js";
 import type { RecordingEntry } from "./recordings.js";
 
 export interface StudioState {
+  jam?: { capture: { active: boolean; projectId: string; generation: number; take: import("./jam-model.js").PerformanceTake } | null; trail: ReturnType<import("./project-service.js").ExplorationTrail["inspect"]>; summary: import("./jam.js").JamSummary | null; capabilities: ReturnType<typeof import("./jam-model.js").jamCapabilities>; verbs: typeof import("./jam-model.js").verbs };
   capture?: ReturnType<import("./capture.js").Capture["snapshot"]>;
   input?: { configuration: import("./capture.js").InputConfiguration | null; devices: string[]; enumeration: boolean; explanation: string };
   project: ProjectDocument;
@@ -124,7 +125,7 @@ export class StudioClient {
         recording,
         recordingUnconfirmed,
         recPath,
-        recordingState, recordings, recordingWarning, preview, capture, input,
+        recordingState, recordings, recordingWarning, preview, capture, input, jam,
         history,
         workspace,
         projectRuntime,
@@ -143,7 +144,7 @@ export class StudioClient {
         recording,
         recordingUnconfirmed,
         recPath,
-        recordingState, recordings, recordingWarning, preview, capture, input,
+        recordingState, recordings, recordingWarning, preview, capture, input, jam,
         history,
         workspace,
         projectRuntime,
@@ -214,7 +215,7 @@ export class StudioClient {
             ? "Jam saved. Find it in My Jams."
             : label === "Record"
               ? result.msg
-              : label + " — done",
+              : command.cmd.startsWith("jam.") ? result.msg : label + " — done",
       });
     } catch (e) {
       this.report(
