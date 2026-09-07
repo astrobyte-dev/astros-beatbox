@@ -1,34 +1,54 @@
-import { type ProjectDocument, type Clip, type Track, type Automation, ranges } from "./project.js";
+import { compileFxAutomation } from "./fx-automation.js";
+import { definition } from "./sound-lab.js";
+import { modulationControls } from "./sound-lab-engine.js";
+import { type ProjectDocument, type Clip, type Track, type Automation, ranges, type Parameter } from "./project.js";
 
 const number = (v: number) => String(Number(v.toFixed(6)));
 function curve(a: Automation): string {
-  const [lo, hi] = ranges[a.parameter];
+  const [lo, hi] = a.parameter.startsWith("synth.") ? [0, 1] : ranges[a.parameter as Parameter];
   const values = '"' + a.values.map(v => number(lo + v * (hi - lo))).join(" ") + '"';
   return a.bars === 1 ? values : `(slow ${a.bars} ${values})`;
 }
 export function compileClip(p: ProjectDocument, c: Clip): string {
   if (c.kind === "code") return c.source; // Opaque expression; never parse/rewrite it.
   const asset = p.assets.find(a => a.id === c.assetId)!;
-  const sound = asset.name + (asset.index ? ":" + asset.index : "");
+  const track = p.tracks.find(t => t.id === c.trackId)!, source = track.source;
+  const synth = source?.type === "synth" ? definition("instrument", source.definitionId, source.version) : undefined;
+  if (source?.type === "synth" && !synth || source?.type === "sample" && asset.kind === "synth") return "silence";
+  const sound = synth ? synth.engine : asset.name + (asset.index ? ":" + asset.index : "");
   let body = 's "' + c.steps.map(v => v > 0 ? sound : "~").join(" ") + '"';
   // Velocity stays multiplicative, even when gain has a musical automation lane.
   body += ' # gain "' + c.steps.map(number).join(" ") + '"';
-  const automation = p.automation.filter(a => a.enabled && a.trackId === c.trackId && (a.clipId === null || a.clipId === c.id));
+  const automation = p.automation.filter(a => !a.parameter.startsWith("fx.") && a.enabled && a.trackId === c.trackId && (a.clipId === null || a.clipId === c.id));
+  if (synth && source?.type === "synth") {
+    // Allow envelopes to ring across pads; explicit clip legato/sustain still wins.
+    body += " # legato 4";
+    const notes = c.steps.map((_, i) => Math.max(0, Math.min(127, (c.notes?.[i] ?? 36) + (c.octave ?? 0) * 12)));
+    body += ' # midinote "' + notes.join(" ") + '"';
+    const previous = notes.map((_, i) => { for (let back = 1; back <= notes.length; back++) { const j = (i - back + notes.length) % notes.length; if (c.steps[j] > 0) return 440 * 2 ** ((notes[j] - 69) / 12); } return 110; });
+    body += ' # pF "abxprev" "' + previous.map(number).join(" ") + '"';
+    if (["dirtymono", "sub808"].includes(synth.id)) body += ' # cut ' + (100 + track.slot);
+    for (const param of synth.parameters) if (!automation.some(a => a.parameter === "synth." + param.id)) body += ' # pF "abx' + param.id + '" ' + number(source.values[param.id]);
+    for (const [key, value] of Object.entries(modulationControls(track.modulation ?? [], "synth."))) body += ' # pF "' + key + '" ' + number(value);
+  }
   for (const key of Object.keys(c.parameters).sort() as (keyof typeof c.parameters)[]) {
     if (automation.some(a => a.parameter === key)) continue;
     body += (key === "gain" ? " |* gain " : ` # ${key} `) + number(c.parameters[key]!);
   }
   for (const a of automation.filter(a => a.clipId !== null || !automation.some(b => b.clipId === c.id && b.parameter === a.parameter)).sort((a, b) => a.parameter.localeCompare(b.parameter))) {
-    body += (a.parameter === "gain" ? " |* gain " : ` # ${a.parameter} `) + curve(a);
+    body += (a.parameter === "gain" ? " |* gain " : a.parameter.startsWith("synth.") ? ` # pF "abx${a.parameter.slice(6)}" ` : ` # ${a.parameter} `) + curve(a);
   }
   return c.swing ? `swingBy ${number(c.swing)} 8 $ ${body}` : body;
 }
 export function compileTrack(p: ProjectDocument, t: Track, clipId = t.activeClipId): string | null {
   const c = p.clips.find(c => c.id === clipId);
-  if (!c) return null;
-  const body = compileClip(p, c);
+  const controls = t.channel !== null ? compileFxAutomation(p, t, clipId) : [];
+  if (!c && !controls.length) return null;
+  const music = c ? compileClip(p, c) : "silence";
+  const body = controls.length ? `stack [(${music}
+), ${controls.join(", ")}]` : music;
   // Routing is an outer projection, separate from the opaque source expression.
-  return c.kind === "steps" || c.managed ? `(${body}${c.kind === "code" ? "\n" : ""}) # orbit ${t.channel}` : body;
+  return !c || c.kind === "steps" || c.managed ? `(${body}${c?.kind === "code" ? "\n" : ""}) # orbit ${t.channel}` : body;
 }
 export function projectSlots(p: ProjectDocument): Record<string, string> {
   return Object.fromEntries(p.tracks.flatMap(t => { const body = compileTrack(p, t); return body === null ? [] : [["d" + t.slot, body]]; }));

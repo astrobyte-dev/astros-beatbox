@@ -1,3 +1,4 @@
+import { instruments, effects } from "./sound-lab.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -40,6 +41,7 @@ async function execute(command: unknown) {
     return { ...text(JSON.stringify({ ok: false, operationId: request.operationId, sessionId: request.sessionId, generation: observed.generation, code: "UNCONFIRMED", error: "Runtime response unavailable; execution is uncertain. Read status before issuing another action. " + String(e) })), isError: true };
   }
 }
+server.tool("sound_lab_catalog", "Instrument and effect definitions, normalized safe control ranges (0–1), curated patches and semantic targets. Use project_edit for source.set, synth.parameter, notes.set, fx.put/remove/order, modulation.put/remove and patch.put/load. FX targets are fx.<instanceId>.<parameter>; synth targets are synth.<parameter>.", async () => text(JSON.stringify({ instruments, effects })));
 server.tool("project_status", "Canonical authored project, server history, workspace, runtime and asset availability. Does not boot audio.", async () => text(JSON.stringify(await state())));
 server.tool("project_edit", "Apply an atomic batch of structured musical edits as one undo intention. Requires current project identity/revision. Visual controls never rewrite arbitrary code.", { ...projectMeta, edits: z.array(editSchema).min(1).max(512), label: z.string().min(1).max(120), groupId: z.string().optional() }, async args => execute({ ...args, cmd: "project.edit" }));
 for (const action of ["undo", "redo", "new", "recover"] as const) server.tool("project_" + action, "Project " + action + "; serialized with UI edits and guarded by project revision.", projectMeta, async args => execute({ ...args, cmd: "project." + action }));

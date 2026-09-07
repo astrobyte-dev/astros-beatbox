@@ -1,3 +1,5 @@
+import { InstrumentBrowser, SoundLab } from "./SoundLab";
+import { definition } from "../../src/sound-lab";
 import {
   useCallback,
   useEffect,
@@ -289,6 +291,7 @@ export function App() {
             {[
               ["Grooves", "groove"],
               ["Sounds", "sound"],
+              ["Synths", "sound"],
               ["My Jams", "folder"],
               ["Recordings", "sound"],
             ].map(([name, icon]) => (
@@ -348,6 +351,8 @@ export function App() {
                 </button>
               )}
             </div>
+          ) : library === "Synths" ? (
+            <InstrumentBrowser project={p} sceneId={state.workspace.selectedSceneId ?? p.sceneOrder[0]} disabled={disabled} onSelect={select} />
           ) : library === "Sounds" ? (
             <SoundLibrary track={track} />
           ) : library === "Recordings" ? (
@@ -508,7 +513,7 @@ export function App() {
                         track={t}
                         clip={c}
                         sound={
-                          a
+                          t.source?.type === "synth" ? `${definition("instrument", t.source.definitionId, t.source.version)?.name ?? "Unavailable instrument"} / synth` : a
                             ? `${a.name}${a.index ? " · " + (a.index + 1) : ""} / ${a.kind}`
                             : c
                               ? "Custom instrument"
@@ -602,6 +607,7 @@ export function App() {
                   ))}
                 </div>
               )}
+              {!performing && track && track.channel !== null && <SoundLab key={p.id + track.id} project={p} track={track} disabled={disabled} />}
               {!performing && <button disabled={disabled} onClick={() => { try { void client.edit(addCodeTrack(p, state.workspace.selectedSceneId ?? p.sceneOrder[0]), "Add managed code instrument"); } catch (e) { client.report(String(e)); } }}>+ Code instrument</button>}
               <div className="workspace-tip">
                 <span>↳</span>
@@ -782,7 +788,7 @@ function Inspector({
   const sound = visual && p.assets.find((a) => a.id === visual.assetId),
     name = trackName(track.name, track.slot);
   const index = visual ? Math.min(step, visual.steps.length - 1) : 0;
-  const assetStatus = sound && state.assets.find((a) => a.id === sound.id);
+  const assetStatus = track.source?.type === "synth" ? undefined : sound && state.assets.find((a) => a.id === sound.id);
   return (
     <>
       <div className="inspector-heading">
@@ -810,7 +816,7 @@ function Inspector({
           }
         />
         <span>
-          {sound
+          {track.source?.type === "synth" ? `${definition("instrument", track.source.definitionId, track.source.version)?.name ?? "Unavailable instrument"} · synth` : sound
             ? `${sound.name} · ${sound.kind} ${sound.index + 1}`
             : "Custom Tidal instrument"}
         </span>
@@ -861,7 +867,7 @@ function Inspector({
             </p>
           </section>
           <section className="inspector-section">
-            <h3>Shape the sound</h3>
+            <h3>{track.source?.type === "synth" ? "Event processing" : "Shape the sound"}</h3>
             <Range
               label="Tone"
               value={visual.parameters.cutoff ?? 24000}

@@ -1,0 +1,73 @@
+{
+  "phase": "P3.5A Sound Lab Core",
+  "platform": "Ubuntu 24.04.4 LTS x86_64",
+  "node": "24.14.0",
+  "npm": "11.9.0",
+  "base": "7f5971ab603c33f893071839c5880b57ed8569f1",
+  "branch": "feat/p3.5a-sound-lab-core",
+  "prBase": "feat/p3-composition-performance",
+  "baseline": {
+    "passed": 201,
+    "skipped": 3,
+    "discovered": 204,
+    "build": "pass",
+    "typechecks": "both pass",
+    "browserJourneys": "Classic, Studio, P2, P3, System pass",
+    "linuxLifecycle": "pass"
+  },
+  "final": {
+    "passed": 256,
+    "skipped": 3,
+    "discovered": 259,
+    "newTests": 55,
+    "skipReason": "Windows-only native process tests on Linux",
+    "build": "pass",
+    "serverTypecheck": "pass",
+    "studioTypecheck": "pass",
+    "soundLabBrowser": "pass (deterministic engine, real HTTP/MCP/project services)",
+    "regressions": {
+      "classic": "pass",
+      "studio": "pass",
+      "p2": "pass",
+      "p3": "pass",
+      "system": "pass",
+      "linuxRuntime": "pass"
+    },
+    "screenshots": {
+      "widths": [
+        1280,
+        1440,
+        1920
+      ],
+      "views": [
+        "instrument",
+        "FX",
+        "motion"
+      ],
+      "review": "Contrast and rack spacing corrected; no page overflow or JS errors"
+    },
+    "additionalFxAutomationTests": 20,
+    "fxAutomationBrowser": "pass: canonical FX lane, base edit, reorder, removal/Undo/Redo, independent layer disables, MCP stale/unsupported rejection, independent scene lanes, save/reopen"
+  },
+  "acceptance": {
+    "implementation": "complete for supported initial surface; limitations in p35-sound-lab-core.md",
+    "ubuntu": "P2.6 Level B Runtime Safe base; fixture audio only",
+    "nativeAudio": "pending; no SC/Tidal native compilation, listening, timing, CPU or node lifetime acceptance claimed",
+    "windows": "pending for P2.6, P3 and P3.5A",
+    "p26Merged": false,
+    "p3Merged": false
+  },
+  "limits": [
+    "14 stable semantic FX controls support P3 lanes; delay time, rate/frequency controls, threshold and damping are deliberately excluded",
+    "Synth modulation phase starts per voice; base edits apply to subsequent events",
+    "Performance source/note/automation curve edits require relaunch; FX lane disable/removal releases immediately; inserts/modulation/mixer/tempo are live",
+    "User patches stored in current project",
+    "Unknown definitions/versions retained but silent/bypassed"
+  ],
+  "scope": {
+    "p35bStarted": false,
+    "p4Started": false,
+    "p5Started": false,
+    "systemAudioOrPackageChanges": false
+  }
+}

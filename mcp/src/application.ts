@@ -1,3 +1,5 @@
+import { STOP_FX_AUTOMATION } from "./fx-automation.js";
+import { rackCommand } from "./sound-lab-engine.js";
 import { randomUUID, createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -152,7 +154,7 @@ export class Application {
   private managed(p = this.project.document): boolean { return p.clips.some(c => c.kind === "steps" || c.managed); }
   private async verifySamples(p: ProjectDocument, id: string, song = this.runtime.song): Promise<void> {
     const active = new Set(song ? p.arrangement.flatMap(a => Object.values(p.scenes.find(s => s.id === a.sceneId)!.clips)) : p.tracks.map(t => t.activeClipId));
-    const assets = new Set(p.clips.filter(c => active.has(c.id) && c.kind === "steps").map(c => (c as { assetId: string }).assetId));
+    const assets = new Set(p.clips.filter(c => active.has(c.id) && c.kind === "steps" && p.tracks.find(t => t.id === c.trackId)?.source?.type !== "synth").map(c => (c as { assetId: string }).assetId));
     const checks: string[] = [];
     for (const a of p.assets) if (assets.has(a.id) && a.kind === "sample" && a.source && resolveSample(a, this.paths.samples).status === "available") {
       this.engine.assertSampleLoaded?.(a);
@@ -171,7 +173,7 @@ export class Application {
     // A file reference is saved intact but needs an explicitly registered library
     // before playback. Never accidentally play a built-in with the same name.
     for (const a of p.assets) if (a.kind === "file") missing.add(a.id);
-    const safe = clone(p), clips = new Set(safe.clips.filter(c => c.kind === "steps" && missing.has(c.assetId)).map(c => c.id));
+    const safe = clone(p), clips = new Set(safe.clips.filter(c => c.kind === "steps" && safe.tracks.find(t => t.id === c.trackId)?.source?.type !== "synth" && missing.has(c.assetId)).map(c => c.id));
     for (const a of safe.assets) if (a.kind === "sample") a.index = resolveSample(a, this.paths.samples).index;
     for (const t of safe.tracks) if (t.activeClipId && clips.has(t.activeClipId)) t.activeClipId = null;
     for (const s of safe.scenes) for (const k of Object.keys(s.clips)) if (s.clips[k] && clips.has(s.clips[k]!)) s.clips[k] = null;
@@ -185,6 +187,7 @@ export class Application {
     const mixing = this.managed(next) || this.managed(previous);
     try {
       if (!performing && !this.rig.stopped && !this.rig.paused && (force || JSON.stringify(before) !== JSON.stringify(after))) await this.verifySamples(next, id);
+      if (force || rackCommand(next, !this.rig.stopped && !this.rig.paused) !== rackCommand(previous, !this.rig.stopped && !this.rig.paused)) await this.sc(rackCommand(next, !this.rig.stopped && !this.rig.paused), id, true);
       if (mixing && (force || mixerCommand(next) !== mixerCommand(previous))) await this.sc(mixerCommand(next), id, true);
       const solo = next.tracks.some(t => t.mixer.solo);
       for (const t of next.tracks.filter(t => t.channel === null)) {
@@ -282,7 +285,7 @@ export class Application {
       if (c.cmd === "song.start" && !this.project.document.arrangement.length) throw new Error("Add scenes to the song chain first");
       if (this.external) throw new Error("Return to the managed project before performing");
       if (c.cmd === "song.stop") {
-        if (this.engine.running) await this.tidal("hush", id);
+        if (this.engine.running) { await this.tidal("hush", id); await this.sc(STOP_FX_AUTOMATION, id, true); }
         this.clearPerformance(); this.runtime.song = false; this.rig.stopped = true; this.rig.paused = true;
         return { msg: "Arrangement stopped; select a scene to perform" };
       }
@@ -357,13 +360,15 @@ export class Application {
     if (this.performanceDocument && !r.stopped && !r.paused) {
       const playing = clone(this.performanceDocument), authored = this.project.document;
       playing.tempo = authored.tempo;
-      for (const track of playing.tracks) { const current = authored.tracks.find(t => t.id === track.id); if (current) track.mixer = current.mixer; }
+      playing.automation = [...playing.automation.filter(a => !a.parameter.startsWith("fx.")), ...authored.automation.filter(a => a.parameter.startsWith("fx.") && playing.tracks.some(t => t.id === a.trackId) && (a.clipId === null || playing.clips.some(c => c.id === a.clipId)))];
+      for (const track of playing.tracks) { const current = authored.tracks.find(t => t.id === track.id); if (current) { track.mixer = current.mixer; track.effects = current.effects; track.modulation = [...(track.modulation ?? []).filter(m => m.target.startsWith("synth.")), ...(current.modulation ?? []).filter(m => m.target.startsWith("fx."))]; } }
       await this.installPerformance(playing, "cycle", id, this.runtime.song, this.performance.queuedSceneId ?? this.performance.sceneId); return;
     }
     if (this.managed()) {
       if (!r.stopped && !r.paused) await this.verifySamples(this.project.document, id);
       await this.tidal("hush", id); await this.tidal("unmuteAll >> unsoloAll", id);
       const p = this.project.document;
+      await this.sc(rackCommand(p, !r.stopped && !r.paused), id, true);
       await this.sc(mixerCommand(p), id, true);
       await this.tidal(`setcps (${p.tempo.bpm}/60/${p.tempo.beatsPerCycle})`, id);
       const anySolo = p.tracks.some(t => t.mixer.solo);
@@ -424,6 +429,7 @@ export class Application {
         await this.tidal(preparedCode(clip.source), id);
       }
       await this.verifySamples(p, id, song);
+      await this.sc(rackCommand(p), id, true);
       await this.sc(mixerCommand(p), id, true);
       await this.tidal(`setcps (${p.tempo.bpm}/60/${p.tempo.beatsPerCycle})`, id);
       const slots = this.audioSlots(p, song);
@@ -550,7 +556,7 @@ export class Application {
       return { msg: "saved set: " + name };
     }
     if (c.cmd === "stop" || c.cmd === "pause" || c.cmd === "hush") {
-      if (this.engine.running) await this.tidal("hush", id);
+      if (this.engine.running) { await this.tidal("hush", id); await this.sc(STOP_FX_AUTOMATION, id, true); }
       else if (this.engine.state !== "idle") throw new Error("Engine unavailable: silence could not be confirmed. " + (this.engine.error ?? ""));
       this.clearPerformance(); this.runtime.song = false;
       r.stopped = true; r.paused = true;
