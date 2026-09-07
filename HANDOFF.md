@@ -7,7 +7,10 @@ Active feature work: **P3.5A — Sound Lab Core**, on
 `7f5971ab603c33f893071839c5880b57ed8569f1`.
 See [the Sound Lab implementation and completion report](docs/p35-sound-lab-core.md)
 and [TASK-3.5A](tasks/TASK-3.5A.md). Initial implementation and portable validation
-are complete; native synthesis/audio/CPU/timing acceptance remains pending.
+are complete, including P3 semantic automation for 14 insert FX controls with
+independent base/modulation ownership. Additional validation: 256 passed, 3 Windows
+skips (259 total), P3/P3.5A browser journeys and real MCP synchronization. Native
+synthesis/audio/CPU/timing acceptance remains pending.
 The P3.5A draft targets `feat/p3-composition-performance`, not main.
 P3 remains implementation complete with native audio/timing acceptance pending;
 see [P3 report](docs/p3-composition-performance.md). P2.6 and P3 remain unmerged

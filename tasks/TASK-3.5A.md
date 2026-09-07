@@ -16,6 +16,12 @@ quality, timing, CPU and Windows desktop/audio acceptance remain pending.
 P2.6 remains Ubuntu Runtime Safe with Windows revalidation pending; P3 remains
 implementation complete with native audio/timing acceptance pending.
 
+Additional P3.5A closure: FX lanes use stable instance/semantic IDs and the existing
+P3 scope/scene/history/MCP model. Fourteen explicit parameters now support distinct
+base, compositional automation and engine modulation layers. Removal cleans authored
+references; Undo restores them. Reordering preserves automation. Twenty additional
+regressions and expanded P3.5A browser coverage accompany this work. Remain in P3.5A.
+
 ## Boundaries
 
 - Preserve source → source processing → insert FX → channel mixer → master.

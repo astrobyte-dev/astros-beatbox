@@ -1,3 +1,4 @@
+import { compileFxAutomation } from "./fx-automation.js";
 import { definition } from "./sound-lab.js";
 import { modulationControls } from "./sound-lab-engine.js";
 import { type ProjectDocument, type Clip, type Track, type Automation, ranges, type Parameter } from "./project.js";
@@ -18,7 +19,7 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
   let body = 's "' + c.steps.map(v => v > 0 ? sound : "~").join(" ") + '"';
   // Velocity stays multiplicative, even when gain has a musical automation lane.
   body += ' # gain "' + c.steps.map(number).join(" ") + '"';
-  const automation = p.automation.filter(a => a.enabled && a.trackId === c.trackId && (a.clipId === null || a.clipId === c.id));
+  const automation = p.automation.filter(a => !a.parameter.startsWith("fx.") && a.enabled && a.trackId === c.trackId && (a.clipId === null || a.clipId === c.id));
   if (synth && source?.type === "synth") {
     // Allow envelopes to ring across pads; explicit clip legato/sustain still wins.
     body += " # legato 4";
@@ -41,10 +42,13 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
 }
 export function compileTrack(p: ProjectDocument, t: Track, clipId = t.activeClipId): string | null {
   const c = p.clips.find(c => c.id === clipId);
-  if (!c) return null;
-  const body = compileClip(p, c);
+  const controls = t.channel !== null ? compileFxAutomation(p, t, clipId) : [];
+  if (!c && !controls.length) return null;
+  const music = c ? compileClip(p, c) : "silence";
+  const body = controls.length ? `stack [(${music}
+), ${controls.join(", ")}]` : music;
   // Routing is an outer projection, separate from the opaque source expression.
-  return c.kind === "steps" || c.managed ? `(${body}${c.kind === "code" ? "\n" : ""}) # orbit ${t.channel}` : body;
+  return !c || c.kind === "steps" || c.managed ? `(${body}${c?.kind === "code" ? "\n" : ""}) # orbit ${t.channel}` : body;
 }
 export function projectSlots(p: ProjectDocument): Record<string, string> {
   return Object.fromEntries(p.tracks.flatMap(t => { const body = compileTrack(p, t); return body === null ? [] : [["d" + t.slot, body]]; }));

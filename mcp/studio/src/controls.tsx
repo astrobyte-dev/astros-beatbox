@@ -277,6 +277,6 @@ export function Knob({ label, value, defaultValue, disabled, modulated, automate
     </div>
     <output>{Math.round(v * 100)}<small>%</small></output>
     <button className="knob-reset" aria-label={`Reset ${label}`} disabled={disabled} onClick={() => onCommit(defaultValue, client.base())}>Reset</button>
-    {(modulated || automated) && <small className="knob-motion">{modulated ? "↝ Modulated" : "◷ Automated"}</small>}
+    {(modulated || automated) && <small className="knob-motion">{modulated && automated ? "◷ Auto · ↝ Mod" : modulated ? "↝ Modulated" : "◷ Automated"}</small>}
   </div>;
 }

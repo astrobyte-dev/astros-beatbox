@@ -214,7 +214,7 @@ export function SoundLab({
               modulated={routes.some((m) => m.target === target && m.enabled)}
               automated={p.automation.some(
                 (a) =>
-                  a.trackId === track.id && a.parameter === target && a.enabled,
+                  a.trackId === track.id && a.parameter === target && a.enabled && (a.clipId === null || a.clipId === clip?.id),
               )}
               onCommit={(value, base) =>
                 void client.edit(
@@ -526,6 +526,7 @@ export function SoundLab({
                   </button>
                   <button
                     aria-label={`Remove effect ${i + 1}`}
+                    title="Remove this effect and its automation and modulation. Undo restores all three."
                     disabled={disabled}
                     onClick={() =>
                       edit(

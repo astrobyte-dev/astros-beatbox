@@ -18,7 +18,7 @@ export const clipSchema = z.discriminatedUnion("kind", [
   z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), notes: z.array(finite.int().min(0).max(127)).min(1).max(128).optional(), octave: z.number().int().min(-4).max(4).optional(), parameters: params }).strict(),
   z.object({ ...clipBase, kind: z.literal("code"), source: z.string().min(1).max(65536), managed: z.boolean(), draft: z.string().max(65536).optional(), dependencyIds: z.array(id).max(128) }).strict(),
 ]);
-export const automationSchema = z.object({ id, trackId: id, clipId: id.nullable(), parameter: z.union([parameterSchema, z.string().regex(/^synth\.[a-z][a-z0-9]*$/)]), enabled: z.boolean(), bars: z.number().int().min(1).max(64), values: z.array(finite.min(0).max(1)).min(2).max(128) }).strict();
+export const automationSchema = z.object({ id, trackId: id, clipId: id.nullable(), parameter: z.union([parameterSchema, z.string().regex(/^(synth\.[a-z][a-z0-9]*|fx\.[a-zA-Z0-9_-]+\.[a-z][a-z0-9]*)$/)]), enabled: z.boolean(), bars: z.number().int().min(1).max(64), values: z.array(finite.min(0).max(1)).min(2).max(128) }).strict();
 export const trackSchema = z.object({ id, name: z.string().max(120), slot: z.number().int().min(1).max(16), channel: z.number().int().min(0).max(CHANNELS - 1).nullable(), activeClipId: id.nullable(), mixer: mixerSchema, source: sourceSchema.optional(), effects: z.array(effectSchema).max(8).optional(), modulation: z.array(routeSchema).max(16).optional() }).strict();
 const sceneSchema = z.object({ id, name: z.string().min(1).max(120), clips: z.record(id, id.nullable()) }).strict();
 const arrangementSchema = z.array(z.object({ id, sceneId: id, cycles: z.number().int().min(1).max(128) }).strict()).max(512);
@@ -79,7 +79,7 @@ export function validateProject(value: unknown): ProjectDocument {
   }
   for (const s of p.scenes) for (const [t, c] of Object.entries(s.clips)) ref(t, c);
   for (const a of p.arrangement) if (!p.scenes.some(s => s.id === a.sceneId)) throw new Error("Invalid arrangement scene");
-  for (const a of p.automation) { ref(a.trackId, a.clipId); if (a.parameter.startsWith("synth.")) { const t = p.tracks.find(t => t.id === a.trackId)!; if (!targetDefinition(t, a.parameter) && !(t.source?.type === "synth" && !definition("instrument", t.source.definitionId, t.source.version))) throw new Error("Unsupported synth automation target"); } if (a.clipId && p.clips.find(c => c.id === a.clipId)!.kind !== "steps") throw new Error("Visual automation requires a step clip"); }
+  for (const a of p.automation) { ref(a.trackId, a.clipId); if (a.parameter.startsWith("synth.")) { const t = p.tracks.find(t => t.id === a.trackId)!; if (!targetDefinition(t, a.parameter) && !(t.source?.type === "synth" && !definition("instrument", t.source.definitionId, t.source.version))) throw new Error("Unsupported synth automation target"); } if (a.parameter.startsWith("fx.")) { const t = p.tracks.find(t => t.id === a.trackId)!, fx = t.effects?.find(f => f.id === a.parameter.split(".")[1]); if (!fx || definition("effect", fx.definitionId, fx.version) && !targetDefinition(t, a.parameter)?.automatable) throw new Error("Unsupported FX automation target: " + a.parameter); } if (a.clipId && p.clips.find(c => c.id === a.clipId)!.kind !== "steps") throw new Error("Visual automation requires a step clip"); }
   unique(p.automation.map(a => a.trackId + ":" + a.clipId + ":" + a.parameter), "automation target");
   return p;
 }
@@ -139,7 +139,7 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
     case "synth.parameter": { const t = track(e.trackId); if (t.source?.type !== "synth" || !targetDefinition(t, "synth." + e.parameter)) throw new Error("Unsupported synth parameter"); t.source.values[e.parameter] = e.value; delete t.source.presetId; break; }
     case "notes.set": { const c = steps(e.clipId); c.notes = e.notes; c.octave = e.octave; break; }
     case "fx.put": { const t = track(e.trackId); const old = t.effects?.find(f => f.id === e.effect.id); if (old && (old.definitionId !== e.effect.definitionId || old.version !== e.effect.version)) throw new Error("Effect instance identity is stable"); t.effects ??= []; put(t.effects, e.effect); break; }
-    case "fx.remove": { const t = track(e.trackId); if (!t.effects?.some(f => f.id === e.effectId)) throw new Error("Unknown effect"); t.effects = t.effects.filter(f => f.id !== e.effectId); t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("fx." + e.effectId + ".")); break; }
+    case "fx.remove": { const t = track(e.trackId); if (!t.effects?.some(f => f.id === e.effectId)) throw new Error("Unknown effect"); t.effects = t.effects.filter(f => f.id !== e.effectId); p.automation = p.automation.filter(a => a.trackId !== t.id || !a.parameter.startsWith("fx." + e.effectId + ".")); t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("fx." + e.effectId + ".")); break; }
     case "fx.order": { const t = track(e.trackId), fx = t.effects ?? []; if (e.ids.length !== fx.length || new Set(e.ids).size !== fx.length || e.ids.some(id => !fx.some(f => f.id === id))) throw new Error("Effect order must be a permutation"); t.effects = e.ids.map(id => fx.find(f => f.id === id)!); break; }
     case "modulation.put": { const t = track(e.trackId); if (!targetDefinition(t, e.route.target)) throw new Error("Unsupported modulation target"); t.modulation ??= []; put(t.modulation, e.route); break; }
     case "modulation.remove": { const t = track(e.trackId); t.modulation = (t.modulation ?? []).filter(m => m.id !== e.routeId); break; }
@@ -182,7 +182,7 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
     case "scene.capture": scene(e.sceneId).clips = Object.fromEntries(p.tracks.map(t => [t.id, t.activeClipId])); break;
     case "scene.activate": { const s = scene(e.sceneId); for (const t of p.tracks) t.activeClipId = s.clips[t.id] ?? null; break; }
     case "arrangement.set": p.arrangement = e.entries; break;
-    case "automation.put": put(p.automation, e.automation); break;
+    case "automation.put": if (e.automation.parameter.startsWith("fx.") && !targetDefinition(track(e.automation.trackId), e.automation.parameter)?.automatable) throw new Error("Unsupported FX automation target: " + e.automation.parameter); put(p.automation, e.automation); break;
     case "automation.delete": p.automation = p.automation.filter(a => a.id !== e.automationId); break;
     case "tempo.set": p.tempo = { bpm: e.bpm, beatsPerCycle: e.beatsPerCycle }; break;
     case "project.rename": p.name = e.name; break;

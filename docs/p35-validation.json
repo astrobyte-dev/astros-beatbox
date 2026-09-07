@@ -16,10 +16,10 @@
     "linuxLifecycle": "pass"
   },
   "final": {
-    "passed": 236,
+    "passed": 256,
     "skipped": 3,
-    "discovered": 239,
-    "newTests": 35,
+    "discovered": 259,
+    "newTests": 55,
     "skipReason": "Windows-only native process tests on Linux",
     "build": "pass",
     "serverTypecheck": "pass",
@@ -45,7 +45,9 @@
         "motion"
       ],
       "review": "Contrast and rack spacing corrected; no page overflow or JS errors"
-    }
+    },
+    "additionalFxAutomationTests": 20,
+    "fxAutomationBrowser": "pass: canonical FX lane, base edit, reorder, removal/Undo/Redo, independent layer disables, MCP stale/unsupported rejection, independent scene lanes, save/reopen"
   },
   "acceptance": {
     "implementation": "complete for supported initial surface; limitations in p35-sound-lab-core.md",
@@ -56,9 +58,9 @@
     "p3Merged": false
   },
   "limits": [
-    "Serial inserts support manual control and engine modulation, not P3 compositional automation lanes",
+    "14 stable semantic FX controls support P3 lanes; delay time, rate/frequency controls, threshold and damping are deliberately excluded",
     "Synth modulation phase starts per voice; base edits apply to subsequent events",
-    "Performance source/note changes require relaunch; inserts/mixer/tempo are live",
+    "Performance source/note/automation curve edits require relaunch; FX lane disable/removal releases immediately; inserts/modulation/mixer/tempo are live",
     "User patches stored in current project",
     "Unknown definitions/versions retained but silent/bypassed"
   ],

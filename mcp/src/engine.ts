@@ -1,3 +1,4 @@
+import { INSTALL_FX_AUTOMATION } from "./fx-automation.js";
 import { SOUND_LAB_SYNTHS } from "./sound-lab-engine.js";
 import dgram from "node:dgram";
 import { EventEmitter } from "node:events";
@@ -126,7 +127,7 @@ export class Engine extends EventEmitter {
   // Master safety limiter + a master level meter that forwards L/R to the
   // dashboard over UDP. Both sit at the root tail (after all SuperDirt orbits).
   private async installChannels(): Promise<void> {
-    await this.sclang.evalRoutine(CHANNEL_SYNTH + SOUND_LAB_SYNTHS + ` s.sync; ~abxFX = Dictionary.new; ~abxBuses = Array.fill(12, { Bus.audio(s, 2) }); ~dirt.orbits.do { |o, i| o.outBus = ~abxBuses[i].index }; s.sync; ~abxChannels = ~abxBuses.collect { |b| Synth.tail(RootNode(s), \\abxChannel, [\\inBus, b.index]) }; s.sync;`, "install-channels", 15000);
+    await this.sclang.evalRoutine(CHANNEL_SYNTH + SOUND_LAB_SYNTHS + ` s.sync; ~abxFX = Dictionary.new; ~abxBuses = Array.fill(12, { Bus.audio(s, 2) }); ~dirt.orbits.do { |o, i| o.outBus = ~abxBuses[i].index }; s.sync; ~abxChannels = ~abxBuses.collect { |b| Synth.tail(RootNode(s), \\abxChannel, [\\inBus, b.index]) }; s.sync;` + INSTALL_FX_AUTOMATION, "install-channels", 15000);
   }
 
   private async installMaster(): Promise<void> {
@@ -151,7 +152,7 @@ export class Engine extends EventEmitter {
       // `time` is the scheduled AUDIO onset; the OSCdef fires ~latency earlier, so
       // lead = time - now is how long until this event is actually heard (~0.25s).
       // Forwarding it lets the browser delay the playhead to match the sound exactly.
-      `~abxEventCount = 0; OSCdef(\\hittap, {|msg, time| var orb = 0, cyc = -1, cpv = -1, lead = (time - SystemClock.seconds).max(0); ~abxEventCount = ~abxEventCount + 1; msg.do { |it, ix| if(it.asString == "orbit") { orb = msg[ix+1] }; if(it.asString == "cycle") { cyc = msg[ix+1] }; if(it.asString == "cps") { cpv = msg[ix+1] } }; NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("HIT " ++ orb); if(cyc >= 0) { NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("CLK " ++ cyc.round(0.0001) ++ " " ++ cpv.round(0.0001) ++ " " ++ lead.round(0.0001)) } }, '/dirt/play'); ` +
+      `~abxEventCount = 0; OSCdef(\\hittap, {|msg, time| var control = false, orb = 0, cyc = -1, cpv = -1, lead = (time - SystemClock.seconds).max(0); msg.do { |it, ix| if(it.asString == "s") { control = msg[ix+1].asString == "abx_fxcontrol" }; if(it.asString == "orbit") { orb = msg[ix+1] }; if(it.asString == "cycle") { cyc = msg[ix+1] }; if(it.asString == "cps") { cpv = msg[ix+1] } }; if(control.not) { ~abxEventCount = ~abxEventCount + 1; NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("HIT " ++ orb) }; if(cyc >= 0) { NetAddr("127.0.0.1", ${METER_UDP_PORT}).sendRaw("CLK " ++ cyc.round(0.0001) ++ " " ++ cpv.round(0.0001) ++ " " ++ lead.round(0.0001)) } }, '/dirt/play'); ` +
       `s.sync;`;
     await this.sclang.evalRoutine(code, "install-master", 15000);
   }

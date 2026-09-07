@@ -6,16 +6,17 @@ import {
   type Modulation,
 } from "./sound-lab.js";
 import type { ProjectDocument } from "./project.js";
+import { fxAutomationTargets, fxNodeKey } from "./fx-automation.js";
 const n = (v: number) => String(Number(v.toFixed(6)));
 // One route per target; base/automation arrives independently of bounded offsets.
 // LFO/random and repeating envelope pulses run in scsynth. Voices start their
 // own phase on each note; insert processors keep their phase while alive.
 // SC binary operators share precedence: keep the modulation product grouped.
-function controls(d: SoundDefinition) {
+function controls(d: SoundDefinition, insert = false) {
   return d.parameters
     .map(
       (p) =>
-        `var ${p.id} = (Lag.kr(\\abx${p.id}.kr(${p.default}), 0.02) + (Select.kr(\\m${p.id}kind.kr(0), [SinOsc.kr(\\m${p.id}rate.kr(1)), LFNoise0.kr(\\m${p.id}rate.kr(1)), EnvGen.kr(Env.perc(0.01, 1), Impulse.kr(\\m${p.id}rate.kr(1)))]) * Lag.kr(\\m${p.id}amount.kr(0), 0.02))).clip(0, 1);`,
+        `var ${p.id} = (Lag.kr(${insert && p.automatable ? `Select.kr(\\a${p.id}enabled.kr(0), [\\abx${p.id}.kr(${p.default}), \\a${p.id}value.kr(${p.default})])` : `\\abx${p.id}.kr(${p.default})`}, 0.02) + (Select.kr(\\m${p.id}kind.kr(0), [SinOsc.kr(\\m${p.id}rate.kr(1)), LFNoise0.kr(\\m${p.id}rate.kr(1)), EnvGen.kr(Env.perc(0.01, 1), Impulse.kr(\\m${p.id}rate.kr(1)))]) * Lag.kr(\\m${p.id}amount.kr(0), 0.02))).clip(0, 1);`,
     )
     .join("\n");
 }
@@ -54,7 +55,7 @@ Out.ar(out, DirtPan.ar(LeakDC.ar(sig).clip2(0.9), 2, pan, env));
   effects
     .map(
       (d) => `SynthDef(\\${d.engine}, { |bus, enabled = 1|
-${controls(d)}
+${controls(d, true)}
 var dry = In.ar(bus,2), wet;
 ${processors[d.id]}
 ReplaceOut.ar(bus, dry.blend(Limiter.ar(LeakDC.ar(wet),0.95,0.002), Lag.kr(enabled.clip(0,1),0.02)));
@@ -80,7 +81,7 @@ export function modulationControls(
 }
 // Persistent per-instance processors, ordered before the existing channel fader.
 // No bus/node IDs are authored. Generation reset reinstalls an empty dictionary.
-export function rackCommand(p: ProjectDocument): string {
+export function rackCommand(p: ProjectDocument, running = true): string {
   const instances = p.tracks.flatMap((t) =>
     (t.effects ?? []).flatMap((f) => {
       const d = definition("effect", f.definitionId, f.version);
@@ -91,13 +92,23 @@ export function rackCommand(p: ProjectDocument): string {
               f,
               d,
               key:
-                t.channel + "_" + f.id + "_" + f.definitionId + "_" + f.version,
+                fxNodeKey(t.channel, f),
             },
           ]
         : [];
     }),
   );
   const keys = instances.map((x) => '"' + x.key + '"').join(",");
+  const targets = p.tracks.filter(t => t.channel !== null).flatMap(t => fxAutomationTargets(p, t)).filter(t => t.lanes.length);
+  const authorizations = targets.flatMap(t => t.authorizations);
+  const targetKeys = authorizations.map(a => JSON.stringify(a.key)).join(",");
+  // Invalidate only the removed/changed lane. Editing a different scene must
+  // neither reset the active selector nor revoke its already queued events.
+  const reset = `var parts = authorization.split($:), target = parts[0] ++ ":" ++ parts[1], node = ~abxFX[parts[0]]; if(node.notNil and: { ~abxFXAutoActive[target] == authorization }) { node.set(("a" ++ parts[1] ++ "enabled").asSymbol, 0); ~abxFXAutoActive.removeAt(target) };`;
+  const automation = `if(~abxFXAutoState[\\running] != ${running}) { ~abxFXAutoState[\\epoch] = ~abxFXAutoState[\\epoch] + 1 }; ~abxFXAutoState[\\running] = ${running}; ` +
+    `~abxFXAuto.keys.asArray.do { |authorization| if([${targetKeys}].includesEqual(authorization).not) { ${reset} ~abxFXAuto.removeAt(authorization); ~abxFXAutoVersions.removeAt(authorization) } }; ` +
+    authorizations.map(a => `if((~abxFXAuto["${a.key}"] != "${a.token}") or: { ${!running} }) { var authorization = "${a.key}"; ${reset} ~abxFXAutoState[\\next] = ~abxFXAutoState[\\next] + 1; ~abxFXAutoVersions[authorization] = ~abxFXAutoState[\\next] }; ~abxFXAuto["${a.key}"] = "${a.token}";`).join(" ") +
+    ` ~abxFXAutoSerial.keys.asArray.do { |target| if(~abxFX[target.split($:)[0]].isNil) { ~abxFXAutoSerial.removeAt(target); ~abxFXAutoActive.removeAt(target) } };`;
   return (
     `~abxFX.keys.asArray.do { |key| if([${keys}].includesEqual(key).not) { ~abxFX.removeAt(key).free } }; ` +
     instances
@@ -118,6 +129,6 @@ export function rackCommand(p: ProjectDocument): string {
         return `if(~abxFX["${key}"].isNil) { ~abxFX["${key}"] = Synth.before(~abxChannels[${t.channel}], \\${d.engine}, [\\bus, ~abxBuses[${t.channel}].index, ${args}]) } { ~abxFX["${key}"].set(${args}) }; ~abxFX["${key}"].moveBefore(~abxChannels[${t.channel}]);`;
       })
       .join(" ") +
-    " s.sync;"
+    automation + " s.sync;"
   );
 }

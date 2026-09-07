@@ -119,12 +119,76 @@ gesture, and synth changes apply to subsequent events. P3 scene/arrangement cont
 remains a prepared performance snapshot: relaunch to hear staged source/note changes;
 mixer, tempo and insert edits are live. No polling frequency was increased.
 
-Initial limitation: compositional automation targets synth controls and the prior
-P3 event controls; **serial insert controls support manual editing and engine
-modulation, but do not yet expose P3 compositional automation lanes**. Unsupported
-FX automation targets are rejected rather than pretending to schedule them. This
-is not a general modulation graph, free-running global synth LFO, MIDI editor or
-macro system.
+### Insert automation completion (additional P3.5A work)
+
+P3 lanes now accept `fx.<stable instance ID>.<semantic parameter ID>`, with the
+existing `trackId` and nullable `clipId` scope. UI, MCP `automation.put`, validation,
+compiler, history and storage share that identity. Rack positions are display-only.
+The catalogue explicitly marks automatable parameters; unsupported new targets
+fail validation before mutation or engine traffic. Future unknown definitions retain
+saved lanes inertly, matching existing version-preservation semantics.
+
+| Effect | P3 automatable semantic parameters |
+| --- | --- |
+| Filter | `cutoff`, `resonance` |
+| Distortion | `drive`, `mix` |
+| Bitcrush | `bits`, `mix` |
+| Reverb | `size`, `mix` |
+| Delay | `feedback`, `mix` |
+| Chorus | `depth`, `mix` |
+| Compressor | `amount` |
+| Ring modulation | `mix` |
+
+These 14 bounded controls form the initial composition surface. Delay time,
+crusher/chorus rate, ring frequency, compressor threshold and reverb damping remain
+manual/modulation-only. Their compositional exposure needs a separate musical/native
+evaluation, particularly delay pitch jumps and abrupt rate/frequency changes.
+
+The track's existing Tidal slot stacks its music with silent `abx_fxcontrol` events.
+Their rhythm is the authored lane's stepped values and cycle span, independent of
+notes/rests. A clip lane overrides a track lane. A silent scene sends base-release
+events unless track-wide motion applies, allowing authored movement on effect tails.
+No extra slots, browser timers or modular graph are introduced.
+
+A SuperDirt custom `play` event returns non-nil, avoiding an audio voice, gate and
+per-event global effects. It schedules one control write at the event's latency on
+SC's SystemClock. This follows the [DirtEvent play contract](https://github.com/musikinformatik/SuperDirt/blob/master/classes/DirtEvent.sc)
+and [SystemClock scheduling](https://doc.sccode.org/Classes/SystemClock.html).
+Native compilation and timing remain an explicit acceptance gate.
+
+The persistent insert retains separate stored-base, automation-value/enable and
+modulation controls. The DSP selects the enabled P3 value (otherwise stored base),
+smooths it, adds the existing continuous modulation offset, and clamps before
+mapping. P3 values are absolute normalized values, as in the existing synth lanes;
+the three authored layers coexist, rather than summing two absolute knob values.
+Editing base does not alter a lane or route. Disabling/deleting automation releases
+to base plus modulation; disabling/removing modulation retains automation and base.
+
+Per-lane content tokens authorize control delivery. They exclude rack order, base,
+modulation and unrelated revisions/scenes. Runtime authorization generations, node
+identity, transport epochs and per-target event serials guard queued delivery and
+expiry. Removal/Undo and disable/re-enable cannot revive an old callback. Changed
+or removed active lanes release the selector; unrelated scene authoring leaves the
+playing lane authorized. Stop/pause/hush release all selectors. Event expiry releases
+the final value after finite arrangements or a lost/muted event stream, preserving
+modulation and base rather than latching a tail. Control events do not count as hits.
+
+FX removal deletes its track's matching clip/track automation and modulation in the
+same history transaction. Undo restores the insert at its prior position plus all
+those lanes/routes; Redo removes them again. Reorder retains IDs, nodes and lane
+authorizations. Scene duplication copies clip lanes to new independent lane/clip IDs
+while keeping the shared track FX instance, consistent with existing scene semantics.
+Checksummed save/reopen and crash recovery preserve all three authored layers.
+
+P3 performance content remains staged until relaunch, including edited FX curves;
+disabling/removing an active lane releases it immediately. Recovery respects current
+FX lane authoring and never reinstates a disabled lane from the performance snapshot.
+Manual insert/modulation edits remain live. There is no general modulation graph,
+free-running global synth LFO, MIDI editor or macro system.
+
+Knob indicators now show both `Auto · Mod` when both layers are enabled, with full
+accessible state text. Motion choices include the FX name/position for readability
+but store stable IDs. Removal explains its authored-reference cleanup and Undo.
 
 ## Studio and accessibility
 
@@ -187,19 +251,25 @@ Preview ownership are preserved. No system audio, package or kernel changes occu
 
 ## Validation and review
 
-Final suite: **236 passed, 3 expected Windows-only skips, 239 discovered; zero
-failures**. Thirty-five new tests cover definitions, five synth compilation paths,
+Final suite: **256 passed, 3 expected Windows-only skips, 259 discovered; zero
+failures**. The initial 35 tests cover definitions, five synth compilation paths,
 source/scene independence, bounds, missing/version handling, pitch, rack identity /
 order / bypass / cleanup, modulation collision/removal/restoration, automation
 coexistence, curated/user patches, recovery, grouped history, stale revisions,
 parameter traffic, failed acknowledgements, scene launch/reopen, reused FX IDs,
-performance reset and SC arithmetic/source contracts. Discovery floor is 239.
+performance reset and SC arithmetic/source contracts. Twenty additional FX regressions cover every exposed control, stable semantic
+identity/reorder, all-rest delivery, clip/track fallback, removal/Undo/Redo, base
+editing/restoration, both modulation disable/removal paths, save/reopen/recovery,
+scene duplication/independence, arrangement slots, invalid/future targets, queued
+callback guards, stale edits, engine reset/stop/resume and unchanged synth behavior.
+Discovery floor is 259.
 
 Production build and both TypeScript checks pass. Browser journeys pass:
 
 - Sound Lab: add/play synth, keyboard and pointer knobs, one history entry, patches,
   notes, two FX/reorder/bypass/Undo, LFO/Undo/Redo, synth automation coexistence,
-  real MCP catalogue/edit/stale rejection, independent duplicated scene notes,
+  FX lane/base edits, reorder/removal/Undo/Redo, independent layer disables,
+  real MCP catalogue/edit/stale/unsupported rejection, independent duplicated scene notes/lanes,
   scene launch, full save/new/reopen/reload and concurrent held-gesture rejection.
 - Classic, original Studio, P2 creative loop, P3 composition/performance and System
   regression journeys; deterministic audio, real project/HTTP/MCP services.

@@ -307,9 +307,56 @@ try {
     },
   });
   assert.equal(stale.isError, true);
+  // Author an insert lane through the same Motion editor and semantic MCP API.
+  const fxId = app.project.document.tracks[0].effects[0].id;
+  const fxTarget = `fx.${fxId}.drive`;
+  await tab("Motion");
+  await page.getByLabel("Modulation destination").selectOption(fxTarget);
+  await click("+ Add motion");
+  const details = page.locator(".lab-motion .inspector-details");
+  if (!(await details.getAttribute("open"))) await details.locator(":scope > summary").click();
+  await page.locator(".lab-motion").getByLabel("Motion control").selectOption(fxTarget);
+  await page.locator(".lab-motion").getByRole("button", { name: "Rise", exact: true }).click();
+  await sync();
+  const fxLane = app.project.document.automation.find(a => a.parameter === fxTarget);
+  assert.ok(fxLane);
+  await tab("FX");
+  const fxKnob = page.getByRole("slider", { name: "Distortion Drive", exact: true });
+  assert.match(await fxKnob.getAttribute("aria-valuetext"), /modulated.*automated/);
+  await fxKnob.focus(); await page.keyboard.press("ArrowUp"); await sync();
+  assert.deepEqual(app.project.document.automation.find(a => a.id === fxLane.id), fxLane);
+  await click("Move effect 2 earlier");
+  assert.deepEqual(app.project.document.automation.find(a => a.id === fxLane.id), fxLane);
+  await click("Remove effect 2");
+  assert.ok(!app.project.document.automation.some(a => a.id === fxLane.id));
+  assert.ok(!app.project.document.tracks[0].modulation.some(m => m.target === fxTarget));
+  await page.getByRole("button", { name: /^Undo:/ }).click(); await sync();
+  assert.deepEqual(app.project.document.automation.find(a => a.id === fxLane.id), fxLane);
+  await page.getByRole("button", { name: /^Redo:/ }).click(); await sync();
+  assert.ok(!app.project.document.automation.some(a => a.id === fxLane.id));
+  await page.getByRole("button", { name: /^Undo:/ }).click(); await sync();
+  const fxEdit = async (edits, label = "MCP FX layers") => { await call("project_edit", { ...meta(), label, edits }); await sync(); };
+  await fxEdit([{ type: "automation.put", automation: { ...fxLane, enabled: false } }]);
+  assert.match(await fxKnob.getAttribute("aria-valuetext"), /modulated/);
+  assert.doesNotMatch(await fxKnob.getAttribute("aria-valuetext"), /automated/);
+  const fxMod = app.project.document.tracks[0].modulation.find(m => m.target === fxTarget);
+  await fxEdit([{ type: "automation.put", automation: fxLane }, { type: "modulation.put", trackId: track.id, route: { ...fxMod, enabled: false } }]);
+  assert.match(await fxKnob.getAttribute("aria-valuetext"), /automated/);
+  assert.doesNotMatch(await fxKnob.getAttribute("aria-valuetext"), /modulated/);
+  await fxEdit([{ type: "modulation.put", trackId: track.id, route: fxMod }]);
+  const rejectedRevision = app.project.document.revision;
+  for (const args of [
+    { ...meta(), revision: rejectedRevision - 1, label: "Stale FX", edits: [{ type: "automation.put", automation: { ...fxLane, values: [0.1, 0.9] } }] },
+    { ...meta(), label: "Unsupported FX", edits: [{ type: "automation.put", automation: { ...fxLane, parameter: `fx.${fxId}.time` } }] },
+  ]) assert.equal((await mcp.callTool({ name: "project_edit", arguments: args })).isError, true);
+  assert.equal(app.project.document.revision, rejectedRevision);
   await click("Duplicate scene");
   const copied = app.project.document.tracks[0].activeClipId;
   assert.notEqual(copied, track.activeClipId);
+  const copiedFxLane = app.project.document.automation.find(a => a.parameter === fxTarget && a.clipId === copied);
+  assert.ok(copiedFxLane); assert.notEqual(copiedFxLane.id, fxLane.id);
+  await fxEdit([{ type: "automation.put", automation: { ...copiedFxLane, values: [0.3, 0.6] } }]);
+  assert.deepEqual(app.project.document.automation.find(a => a.id === fxLane.id), fxLane);
   await tab("Notes");
   await page.getByLabel("Note sequence").fill("48 48 55 55 51 51 60 48");
   await page.getByLabel("Note sequence").press("Enter");
@@ -390,7 +437,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "P3.5A BROWSER PASS: synth collection, Play, grouped pointer/keyboard knobs, patch load/save, notes, ordered FX/bypass/undo, modulation/automation coexistence, real MCP catalogue/edit/stale rejection, independent scene notes, scene launch, save/new/reopen/reload, stale held gesture, three widths. Deterministic audio only.",
+    "P3.5A BROWSER PASS: synth collection, Play, grouped pointer/keyboard knobs, patch load/save, notes, ordered FX/bypass/undo, modulation/automation coexistence, FX semantic lanes/base edits/reorder/removal/Undo/Redo/independent disables, real MCP catalogue/edit/stale/unsupported rejection, independent scene notes, scene launch, save/new/reopen/reload, stale held gesture, three widths. Deterministic audio only.",
   );
 } finally {
   await mcp?.close();

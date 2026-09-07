@@ -10,6 +10,7 @@ export interface SoundParameter {
   max: number;
   step: number;
   meaning: string;
+  automatable?: boolean;
   advanced?: boolean;
   unit?: string;
 }
@@ -38,6 +39,7 @@ const control = (
   step: 0.001,
   unit: "%",
   meaning,
+  automatable: true,
   advanced,
 });
 const instrument = (
@@ -167,6 +169,13 @@ export const instruments: SoundDefinition[] = [
     ],
   ),
 ];
+// Deliberate composition surface. Delay time, rate/frequency controls and
+// compressor threshold remain manual/modulation targets pending native evaluation.
+const fxAutomatable: Record<string, string[]> = {
+  filter: ["cutoff", "resonance"], distortion: ["drive", "mix"],
+  crush: ["bits", "mix"], reverb: ["size", "mix"], delay: ["feedback", "mix"],
+  chorus: ["depth", "mix"], compressor: ["amount"], ring: ["mix"],
+};
 export const effects: SoundDefinition[] = [
   instrument(
     "filter",
@@ -254,7 +263,7 @@ export const effects: SoundDefinition[] = [
     [control("frequency", "Frequency", 0.3), control("mix", "Mix", 0.3)],
     [["Machine", { frequency: 0.55, mix: 0.65 }]],
   ),
-].map(d => ({ ...d, engine: "abxfx_" + d.id }));
+].map(d => ({ ...d, engine: "abxfx_" + d.id, parameters: d.parameters.map(p => ({ ...p, automatable: fxAutomatable[d.id].includes(p.id) })) }));
 const identity = z
   .string()
   .regex(/^[a-zA-Z0-9_-]{1,100}$/)
