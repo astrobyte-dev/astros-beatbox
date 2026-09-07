@@ -1,9 +1,27 @@
 # Astro's Beatbox handover
 
-Updated 2026-09-07 (Australia/Hobart). Current implementation: **P5 — Product Finish**,
-on `feat/p5-product-finish`, stacked on exact P4 commit
+Updated 2026-09-07 (Australia/Hobart). **P5 — Product Finish implementation is complete**
+on `feat/p5-product-finish`. P5 implementation commit:
+`871203226a4337e2231151483b8b9fd2616410c5` (`feat: finish P5 product experience`).
+The Windows handoff documentation commit follows it; `git rev-parse HEAD` identifies
+the checkout's full commit. P5 is stacked on exact P4 commit
 `0947f818d73d490d4e252182b0df47d716f4134a` and targeting
-`feat/p4-jam-exploration`. Lower draft PRs remain unmerged.
+`feat/p4-jam-exploration` in [draft PR #9](https://github.com/astrobyte-dev/astros-beatbox/pull/9).
+
+The current stack, from newest to oldest, is:
+
+| Draft PR | Branch | Target |
+| --- | --- | --- |
+| #9 | `feat/p5-product-finish` | `feat/p4-jam-exploration` |
+| #8 | `feat/p4-jam-exploration` | `feat/p3.5b-capture-sampling` |
+| #7 | `feat/p3.5b-capture-sampling` | `feat/p3.5a-sound-lab-core` |
+| #6 | `feat/p3.5a-sound-lab-core` | `feat/p3-composition-performance` |
+| #5 | `feat/p3-composition-performance` | `feat/p2.6-ubuntu-portability` |
+| #4 | `feat/p2.6-ubuntu-portability` | `main` |
+
+None of these PRs has been merged. Older historical PRs #1–#3 were already merged;
+that history is separate from this open stack. This handoff starts no new phase
+and authorizes no merges or changes to acceptance gates.
 
 Start with the [P5 report](docs/p5-product-finish.md),
 [pre-implementation audit](docs/p5-product-audit.md),
@@ -38,7 +56,7 @@ not close these later revalidation gates.
 
 The historical checkpoint and native setup contracts below remain relevant.
 
-## Checkpoint
+## Historical P2.5 checkpoint
 
 Repository: https://github.com/astrobyte-dev/astros-beatbox.git, branch `main`.
 The P2.5 milestone follows the completed P0a (`c03c545`), P0b (`e50942c`),
@@ -83,40 +101,76 @@ takes passed; added diagnostics retain input peak, DSP time, event counts,
 generation/revision/mixer context and per-take identities. Preserve that coverage.
 If it recurs, keep the WAV and adjacent `.recording.json` and copy System logs.
 
-## Set up the next Windows laptop
+## Continue on the Windows desktop through P5
 
 1. Install the external prerequisites in [README](README.md#prerequisites):
    Node 24.14.0 / npm 11.9.0, SuperCollider (validated with 3.14.1), SuperDirt,
    Dirt-Samples, Vowel/sc3-plugins, GHCup/GHC/cabal and TidalCycles 1.10.
    Windows Script Host must be available for the double-click launcher.
-2. In PowerShell, clone and build:
+2. In PowerShell, clone the P5 branch (not the default `main`) and verify it:
 
    ```powershell
-   git clone https://github.com/astrobyte-dev/astros-beatbox.git
-   Set-Location astros-beatbox/mcp
+   git clone --branch feat/p5-product-finish https://github.com/astrobyte-dev/astros-beatbox.git
+   Set-Location astros-beatbox
+   git fetch origin
+   git branch --show-current
+   git rev-parse HEAD
+   git rev-list --left-right --count HEAD...origin/feat/p5-product-finish
+   git status --short
+   ```
+
+   Expect `feat/p5-product-finish`, the final handoff SHA from the delivery reply,
+   `0 0` divergence and no status output. For an existing clean clone, run these
+   from its repository root instead of cloning:
+
+   ```powershell
+   git status --short
+   git fetch origin
+   git switch feat/p5-product-finish
+   git pull --ff-only origin feat/p5-product-finish
+   git rev-parse HEAD
+   git rev-list --left-right --count HEAD...origin/feat/p5-product-finish
+   git status --short
+   ```
+
+   If there is local work or divergence, preserve it and inspect before proceeding;
+   do not reset, clean or force-push to make the checkout match. Git switch will
+   track the fetched branch automatically if no local P5 branch exists.
+
+   With the documented Node/npm versions installed, restore and validate:
+
+   ```powershell
+   Set-Location mcp
    npm ci
    npm test
    npm run typecheck
    npx playwright install chromium
+   npm run selftest:p5
    ```
 
-3. Double-click `Launch Beatbox.vbs` in the repository root. Start Pocket groove
-   and press Play in Studio. Use System to inspect audio and to Quit.
-4. Choose a WASAPI output belonging to the new laptop in the classic dashboard
+   `npm test` includes the production build. The P5 browser journey uses fixture
+   audio and regenerates screenshot/validation evidence; inspect resulting file
+   changes before committing any Windows evidence. These checks do not close
+   native acceptance gates. Follow the P5 report and linked phase reports for the
+   remaining Windows/native validation; do not begin another feature phase.
+3. Double-click `Launch Beatbox.vbs` in the repository root. Use Start Playing
+   in Studio. Use System to inspect audio and to Quit.
+4. Choose a WASAPI output belonging to the Windows desktop in the classic dashboard
    if the system default does not work. Do not copy the old `audio_device.txt`.
    Nonstandard dependency locations use the environment overrides in README;
    no old user's absolute paths are required by the launcher.
 5. Optional MCP setup: copy `.mcp.json.example` to ignored `.mcp.json`, adjusting
    the server path to this new clone. MCP is not needed for standalone Studio.
-6. For full acceptance replay, follow [TASK-2.5](tasks/TASK-2.5.md#validation).
-   Stop the normal audio rig first and run audio tests sequentially.
+6. For historical P2.5 acceptance replay, follow [TASK-2.5](tasks/TASK-2.5.md#validation).
+   Stop the normal audio rig first and run audio tests sequentially. That replay
+   alone does not validate the later P2.6–P5 gates listed above.
 
 All application source, dependency lockfiles, setup instructions, regression
 harnesses and reviewed acceptance summaries belong to GitHub. `npm ci` and build
 regenerate dependencies and output; SuperCollider/Haskell dependencies are
 installed locally using the documented prerequisites.
 
-The handover also exported the staged repository into a fresh temporary folder:
+The historical P2.5 handover exported the staged repository into a fresh temporary folder:
 `npm ci`, the production build, all 157 tests and both typechecks passed there
 without copying this workspace's dependencies, output or runtime state.
 
@@ -152,5 +206,5 @@ Windows acceptance screenshots with regenerated Linux captures.
 The missing TASK-2.4 reference belonged to the pasted migration handoff; no
 repository reference/history establishes that file. It was not reconstructed.
 Historical milestone reports retain their original scope statements. The current
-approved P3 scope and implementation status are linked above; no native or Windows
+completed P5 implementation scope and status are linked above; no native or Windows
 acceptance has been inferred from portable tests.
