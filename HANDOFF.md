@@ -1,36 +1,42 @@
 # Astro's Beatbox handover
 
-Updated 2026-09-07 (Australia/Hobart). Active implementation: **P4 — Jam &
-Exploration**, on `feat/p4-jam-exploration`, stacked on exact P3.5B commit
-`63d99d0f61fc62f1430db8abebb60f540f90b164`. P4 implementation and available
-Ubuntu validation are complete. See [the complete P4 report](docs/p4-jam-exploration.md),
-[TASK-4](tasks/TASK-4.md) and [validation results](docs/p4-validation.json).
+Updated 2026-09-07 (Australia/Hobart). Current implementation: **P5 — Product Finish**,
+on `feat/p5-product-finish`, stacked on exact P4 commit
+`0947f818d73d490d4e252182b0df47d716f4134a` and targeting
+`feat/p4-jam-exploration`. Lower draft PRs remain unmerged.
 
-Final validation: **374 passed, 3 Windows-only skips (377 discovered)**, production
-build, both typechecks, eight browser journeys, real MCP synchronization and Linux
-runtime/lifecycle. Final checks use Node 24.14.0 / npm 11.9.0. Screenshots were
-critically reviewed and the Jam layout refined. Fixture audio is not native proof.
-The P4 draft targets `feat/p3.5b-capture-sampling`. Do not merge stacked drafts.
-**P5 was not started.**
+Start with the [P5 report](docs/p5-product-finish.md),
+[pre-implementation audit](docs/p5-product-audit.md),
+[validation evidence](docs/p5-validation.json) and [TASK-5](tasks/TASK-5.md).
+The [user guide](docs/user-guide.md) explains the product without phase history.
 
-ProjectService remains the musical authority. Jam adds server-side seeded semantic
-transformations, persisted locks/held macro offsets, independent bounded macro
-layering, inert runtime exploration snapshots, scene clip promotion and a bounded
-performance event notebook. The notebook does not replay or invent timing. Existing
-instruments/FX/macros remain shared across scenes; macro gestures commit on release
-and synth offsets affect new notes. Read the report before extending these contracts.
+P5 makes the existing music workflows coherent: rhythm-first editing, persistent
+transport/save status, guarded unsaved reopen, remembered optional tips/Help,
+focus links, Capture→My Sounds, visible completed recordings, accessible contrast,
+reduced-motion clock behavior and connected error recovery. Classic remains under
+System compatibility for explicit unmatched source/device/routing capabilities.
+It is not deleted or claimed to have full Studio parity.
 
-All inherited gates remain open: **P2.6 Windows desktop/audio; P3 native audio/timing
+Final portable suite: **377 passed, 3 Windows skips, 380 discovered**. Build, both
+typechecks, all eight inherited browser journeys, new horizontal P5 journey and
+Linux runtime/lifecycle pass. P5 adds automated accessibility and realistic
+12-track/16-scene fixture measurements. Read the JSON/report for exact per-state
+results, sizes and limits; synthetic audio is not native proof.
+
+ProjectService and the serialized application queue remain authoritative. The
+only server addition publishes the existing save observation plus the last
+successful filename to Studio. No new authored schema, player, native code,
+parameter range, ownership rule or major feature family was introduced.
+
+**All native gates remain open:** P2.6 Windows desktop/audio; P3 native audio/timing
 and Windows; P3.5A native audio/timing/CPU and Windows; P3.5B native microphone/audio
-and Windows**. P4 adds native audible/musical-quality, macro/timing/CPU and Windows
-acceptance. Ubuntu remains **Level B — Runtime Safe**, native audio unvalidated.
-No system/audio/kernel packages were changed. P2.5's previously accepted Windows
-milestone remains historically accepted; it does not close later revalidation gates.
+and Windows; P4 native audio/timing/CPU/musical quality and Windows. P5 also needs
+real Windows and native whole-product acceptance. Ubuntu remains **Level B —
+Runtime Safe**, native audio unvalidated. No system/kernel/audio packages or
+pending installation state were modified. Historical P2.5 Windows acceptance does
+not close these later revalidation gates.
 
-P3.5B, P3.5A and P3 implementation reports remain available at
-[Capture & Sampling](docs/p35b-capture-sampling.md),
-[Sound Lab Core](docs/p35-sound-lab-core.md) and
-[Composition & Performance](docs/p3-composition-performance.md).
+The historical checkpoint and native setup contracts below remain relevant.
 
 ## Checkpoint
 

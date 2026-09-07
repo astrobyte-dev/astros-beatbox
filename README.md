@@ -1,103 +1,60 @@
 # Astro's Beatbox 🎛️
 
-A free musical playground for Windows. **Play with sound.** Start a groove, change a rhythm, and keep what you like. The original live-coding dashboard remains available for deeper Tidal workflows.
+**Play with sound.** Start a groove, change a rhythm, explore an instrument and
+keep what you like. Astro's Beatbox is a local music playground with Studio, Jam,
+Sound Lab, sampling, scenes and performance recording.
 
-**Stack:** React + TypeScript + Vite studio → shared TypeScript project/MCP service → [TidalCycles](https://tidalcycles.org/) → [SuperCollider](https://supercollider.github.io/) / SuperDirt → WASAPI audio. Both interfaces share one recoverable project.
+[Start here: the user guide](docs/user-guide.md) ·
+[Installation](#prerequisites) · [Development handoff](HANDOFF.md)
 
-> **Platform:** Windows 10/11 is the accepted audio baseline. P2.6 adds Ubuntu
-> development and tested Node runtime lifecycle support (Level B). Native Linux
-> audio is unvalidated; Windows revalidation of P2.6 is pending. See
-> [Ubuntu setup and status](docs/p26-ubuntu-portability.md).
+Open **Studio → Start Playing** for a four-instrument Pocket groove. Tap a pad,
+try another sound or enter **Jam ✳** to make a variation. Save status stays beside
+your project name. **?** opens a short guide and keyboard shortcuts.
 
----
+![Astro's Beatbox Studio](docs/p5-after/studio-1440.png)
 
-P2.5 is complete. See [HANDOFF.md](HANDOFF.md) for the accepted checkpoint,
-Windows laptop setup and next-task boundary. [P2.6 portability](tasks/TASK-2.6.md)
-is the portability base; its native-audio and Windows gates remain open. P3,
-P3.5A and P3.5B implementations are stacked on that base with native acceptance still pending.
+## Make it yours
 
-## Screenshots
+- **Studio:** tactile rhythm pads, velocity, swing, independent channel mixing and shared Undo/Redo.
+- **Sound Lab:** synth patches, sample shaping, serial effects and modulation; basic controls first, depth available.
+- **My Sounds / Capture:** import WAVs, record an input, keep a sample, trim, reverse, loop and chop without changing originals.
+- **Jam:** protect favorite parts, make bounded variations, compare ideas, move macros and promote rhythms to scenes.
+- **Scenes / Perform:** independent rhythms, arrangement repeats, queued scene launches and engine-reported position.
+- **My Jams / Recordings:** complete project saves, stopped reopen, recovery checkpoints and finalized WAV recordings.
+- **System:** local readiness, processes, ports and logs, owned audio restart/stop and clean Quit.
 
-![The new Astro's Beatbox studio](docs/p1-studio-1440.png)
+The collection separates built-in samples, synths, personal sounds, saved jams and
+recordings. Capture's **Keep as Sample → Use this sound** takes you to My Sounds.
+The user guide explains the limits: scenes share instrument/FX settings; Jam ideas
+are session alternatives; imported files need the managed audio directory when
+moving projects; macros apply on release; loops do not time-stretch audio.
 
-The instrument studio lives at `/studio`. The screenshots below show the retained classic dashboard at `/`.
+## Platform and development status
 
-![Astro's Beatbox in action](docs/demo.gif)
+Windows is the historical native audio baseline. Current P5 development runs on
+Ubuntu 24.04.4 LTS with **Level B — Runtime Safe** validation. Native Linux audio
+and microphone behavior remain unvalidated. Real Windows revalidation remains
+pending for all stacked development phases; browser/CI results do not establish
+native timing, CPU, musical quality or desktop acceptance.
 
-| Live dashboard | Step sequencer |
-|---|---|
-| ![dashboard](docs/01-dashboard.png) | ![step sequencer](docs/03-stepgrid.png) |
+P5 is intentionally stacked on P4. See the [Product Finish audit](docs/p5-product-audit.md),
+[completion report](docs/p5-product-finish.md) and [validation evidence](docs/p5-validation.json).
+The prior contracts remain in [Jam](docs/p4-jam-exploration.md),
+[Sampling](docs/p35b-capture-sampling.md), [Sound Lab](docs/p35-sound-lab-core.md),
+[Composition](docs/p3-composition-performance.md) and [Ubuntu setup](docs/p26-ubuntu-portability.md).
 
-Each instrument gets its own wavelength colour and a **live waveform of its own audio**. Built-in cheat sheet — clickable Tidal snippets, genre starters, build-ups & drops:
+## Compatibility and architecture
 
-![cheat sheet](docs/02-cheatsheet.png)
+Studio is at `/studio`; System is at `/system`. The classic dashboard remains at
+`/`, linked under System's **Compatibility tools**, for raw Tidal code, source
+import/export, output-device selection and legacy routing. These capabilities do
+not yet have complete Studio parity. See the [capability comparison](docs/p5-product-audit.md#classic-capability-decision-before-implementation).
 
----
-
-## Features
-
-- **System:** one calm control center at `/system` for runtime health, owned processes, ports, recent logs, recording-safe audio restart and clean Quit. A second launch connects to the existing runtime.
-- **Studio:** named instruments, keyboard-accessible rhythm pads, painting, velocity, swing, contextual effects, independent mixing, generated code inspection, shared Undo/Redo, complete Save and My Jams.
-- **One curated starter:** Pocket groove, with kick, snare, hi-hat and clap. Browse and audition installed sound banks in Sounds, then Replace the selected visual instrument.
-- The following deeper tools remain available in the **classic dashboard**:
-- **Live layer cards** (`d1`–`d16`) — each shows its code, a plain-English explanation, per-layer knobs, and a **live waveform of that channel's own audio**
-- **Per-channel oscilloscope** — every card draws a real, phase-locked waveform tapped from its own voice; plus a master L/R meter and a **wavelength-coloured spectrum** (low freq red → high freq blue)
-- **Mixer view** with all 12 channels as strips: a volume fader, pan, reverb + delay sends, mute/solo, a meter, and a live mini-scope each
-- **Step sequencer** with **per-step velocity** (scroll a pad), **drag-to-paint** + right-click erase, swing, and a playhead **locked to the audio** so each lit step flashes exactly when you hear it
-- **Pattern slots (A/B/C/D)** you can chain into a song that advances each bar
-- **Drag-and-drop sample browser** — drag a sound onto a channel to swap it; drag channels to reorder
-- **Per-channel modulation curves** — draw an automation/LFO curve per layer
-- **Save / load sets**, **record-to-WAV**, live **audio-device switcher** (speakers ↔ headphones)
-- **Set Loop** — freeze the current beat into one `LOOP_` channel and build on top
-- Loop-progress bar, track timer, keyboard shortcuts, built-in cheat sheet, "Surprise me"
-
----
-
-## Jam & Exploration (P4)
-
-Open **Jam ✳** in Studio to keep favorite instruments, make related seeded
-variations, compare ideas, twist semantic macros and save independent clips as
-scenes. Start From Groove, Start Minimal or Surprise Me gets an empty project
-playing through the normal audio runtime. Undo and deeper Studio editing stay close.
-
-Locks persist with the project, including any macro contribution held when a
-control was locked. Macros preserve base values, automation and modulation; release
-a gesture to apply it (synth changes arrive on new notes). Keep This marks a session
-idea; Save jam persists the current project. Scene instruments/FX/macros stay shared.
-The optional performance notebook preserves event order, with no automatic replay.
-
-P4 is stacked on P3.5B. [Architecture, full validation and remaining gates](docs/p4-jam-exploration.md).
-Ubuntu implementation/runtime validation passes; native audio/musical quality and
-all inherited Windows gates remain pending. P5 has not begun.
-
-## Capture & Sampling Lab (P3.5B)
-
-In Studio, open **My Sounds → Add Files / Add Folder**, review the selection, then
-import. Supported audio is PCM16 mono/stereo WAV, up to 15 minutes / 256 MiB per
-sound. Preview, favorite, tag or collect sounds; **Add track** or **Use on track**
-brings one into your groove.
-
-Open the Sound Lab **Sample** tab to trim, reverse, pitch, shape the envelope and
-chop into playable regions. Edits keep the original intact and support Undo/Redo.
-Pitch changes speed/duration. **Loop phrase** sets the pad pattern's repeat length;
-it does not stretch audio to match tempo. Existing track FX process imported and
-retained captured sounds.
-
-**Capture** records an external input separately from project Recording. Pause
-playback and stop recording, select the input, then **Prepare input** (restarts
-audio). Monitoring starts off. Check input level, Record, Stop, preview and
-**Keep as Sample**. Captures are dry after input gain, mono, up to five minutes.
-Use headphones for monitoring. System **Stop audio** releases prepared input.
-Native input/audio behavior is still pending hardware acceptance on Ubuntu/Windows;
-the completed browser workflow uses deterministic fixtures.
-
-Managed audio lives in the project store's `audio/` directory. Copy that directory
-and its sidecars with your projects when moving machines: `.abx.json` references
-sound identities but does not embed audio. Missing sounds stay missing until the
-exact original is relinked. Musical Undo never deletes your retained sounds.
-See the [complete report and acceptance limits](docs/p35b-capture-sampling.md).
-
----
+React + TypeScript + Vite → one TypeScript project/runtime service →
+[TidalCycles](https://tidalcycles.org/) → [SuperCollider](https://supercollider.github.io/)
+/ SuperDirt. Studio, classic and MCP use the same recoverable musical document.
+No accounts, tracking or cloud service is required. Developer contracts and phase
+history are separate from the [user guide](docs/user-guide.md).
 
 ## Prerequisites
 

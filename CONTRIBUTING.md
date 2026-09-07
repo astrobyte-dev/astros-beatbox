@@ -36,6 +36,21 @@ sets/*.tidal               saved jams
 
 ## Dev workflow
 
+P5 is stacked on `feat/p4-jam-exploration`. Read the
+[Product Finish report](docs/p5-product-finish.md) and [audit](docs/p5-product-audit.md).
+`npm run selftest:p5` runs production Studio/HTTP/storage/System with explicit
+synthetic audio, a horizontal creative journey, axe accessibility checks and a
+12-track/16-scene stress fixture. It writes only `docs/p5-after/` and
+`docs/p5-validation.json`. It is included in CI. No physical audio acceptance is
+implied. Preserve earlier phase screenshots if their regression harnesses regenerate
+them. See the report for review rules and the retained classic capability gaps.
+
+Studio reads `persistence` from Application; do not invent a browser dirty-document
+model. Tip preferences are browser-only and musical edits still use the original
+immutable revision/session base. The clock strip must not animate under reduced
+motion. Keep the explicit keyboard/text/dialog exclusions and focus restoration.
+
+
 P4 is stacked on `feat/p3.5b-capture-sampling`. Read the
 [Jam & Exploration report](docs/p4-jam-exploration.md) for locks, held offsets,
 source capabilities, macro composition, inert snapshot history and event-notebook

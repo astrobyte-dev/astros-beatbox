@@ -13,8 +13,9 @@ export function Composition({ state, disabled, performing, onPerform }: { state:
   const duplicate = () => { const id = crypto.randomUUID(); void client.edit([{ type: "scene.duplicate", sceneId: selected.id, newSceneId: id, name: selected.name + " copy" }, { type: "scene.activate", sceneId: id }], "Duplicate scene"); };
   const launch = (sceneId: string, repeat = false) => void client.command({ cmd: "scene.launch", sceneId, boundary: "cycle", repeat }, "Queue scene");
   const name = (id: string | null | undefined) => p.scenes.find(s => s.id === id)?.name ?? "Section";
-  return <section className="composition" aria-label="Composition and performance">
-    <div className="composition-heading"><h2 ref={heading} tabIndex={-1}>Your sections</h2><button aria-pressed={performing} onClick={onPerform}>{performing ? "Back to editing" : "Perform"}</button></div>
+  return <section className="composition" tabIndex={-1} aria-label="Composition and performance">
+    <div className="composition-heading"><h2 ref={heading} tabIndex={-1}>Scenes & performance</h2><button aria-pressed={performing} onClick={onPerform}>{performing ? "Back to editing" : "Perform"}</button></div>
+    <p className="composition-explanation">A scene keeps a rhythm for each instrument. Sounds and FX are shared. Edit here, or Perform to launch scenes on the next cycle.</p>
     <p className="performance-status" role="status">{live?.clock === "unavailable" ? "Musical clock unavailable · playback position unconfirmed" : live?.queuedSceneId ? `${name(live.queuedSceneId)} · Next cycle` : live?.ended ? "Arrangement finished · silence" : live?.sceneId ? `${name(live.sceneId)} · Current${live.repeat ? ` · repeat ${live.repeat}` : ""}` : "Choose a section. Launch when you’re ready."}</p>
     <div className="scene-strip">
       {p.sceneOrder.map(id => { const scene = p.scenes.find(s => s.id === id)!, silence = p.tracks.some(t => !scene.clips[t.id]); return <div className={`scene-card ${selected.id === id ? "selected" : ""}`} key={id}>
@@ -37,6 +38,7 @@ export function Composition({ state, disabled, performing, onPerform }: { state:
     {live?.mode !== "manual" && live && state.projectRuntime.appliedRevision !== p.revision && <p className="notice">Your edits are saved in this jam. Relaunch a section or the arrangement to hear the updated composition. Mix and tempo changes are live.</p>}
     <details className="arrangement" open={performing || undefined}><summary>Arrange your sections <span>{p.arrangement.reduce((n, e) => n + e.cycles, 0)} cycles</span></summary>
       <p>Each repeat lasts one cycle · {p.tempo.beatsPerCycle} beats. Sections play in this order.</p>
+      {!p.arrangement.length && <p className="arrangement-empty">Choose a scene, then Add it below to build your first arrangement.</p>}
       <ol className="arrangement-entries">{p.arrangement.map((entry, i) => <li key={entry.id} className={live?.entryId === entry.id ? "current" : ""}>
         <span>{i + 1}. {name(entry.sceneId)}{live?.entryId === entry.id ? " · Current" : ""}</span>
         <Repeats project={p} entryId={entry.id} index={i} disabled={disabled} />
