@@ -40,6 +40,8 @@ export class ProjectStorage {
   constructor(readonly directory: string, readonly recoveryDirectory: string, private fault?: (stage: WriteStage) => void) {}
   private file(name: string) {
     if (!/^[a-z0-9_-]{1,80}$/i.test(name)) throw new Error("Project name must use letters, numbers, underscore or hyphen");
+    const collision = this.list().find(existing => existing.toLowerCase() === name.toLowerCase() && existing !== name);
+    if (collision) throw new Error(`Use the existing project spelling '${collision}' to keep filenames portable across Windows and Linux`);
     return path.join(this.directory, name + ".abx.json");
   }
   list(): string[] { return existsSync(this.directory) ? readdirSync(this.directory).filter(f => f.endsWith(".abx.json")).map(f => f.slice(0, -9)).sort() : []; }

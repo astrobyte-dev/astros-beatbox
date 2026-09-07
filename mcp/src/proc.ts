@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { StringDecoder } from "node:string_decoder";
 import { diagnostic, FrameReader, type Frame, type EvalResult, type OutputStream } from "./protocol.js";
-import { identifyOwnedProcess, stopOwnedProcessTree, type ProcessIdentity } from "./owned-process.js";
+import { captureOwnedIdentity, checkOwnershipSupport, stopManagedTree, type ProcessIdentity } from "./owned-process.js";
 
 export interface DriverFault { kind: "process" | "timeout" | "interpreter"; message: string; operationId?: string; observedDuringOperationId?: string }
 
@@ -29,11 +29,15 @@ export class ProcDriver extends EventEmitter {
 
   start(): void {
     if (this.proc || this.unavailable) throw new Error("Driver already started or stopped; create a new generation.");
-    this.proc = spawn(this.exe, this.args, { env: this.env, ...this.spawnOpts, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    if (this.ownTree) {
+      try { checkOwnershipSupport(); }
+      catch (e) { throw new Error("Managed audio requires verified process ownership (on Linux: Python 3.9+ with pidfds). " + String(e)); }
+    }
+    this.proc = spawn(this.exe, this.args, { env: this.env, ...this.spawnOpts, ...(this.ownTree && process.platform === "linux" ? { detached: true } : {}), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     this.proc.on("spawn", () => {
       this.startedAt = new Date().toISOString();
-      if (this.ownTree && process.platform === "win32" && this.proc?.pid && !this.exited) {
-        try { this.identity = identifyOwnedProcess(this.proc.pid); }
+      if (this.ownTree && this.proc?.pid && !this.exited && !(process.platform === "linux" && this.stopping)) {
+        try { this.identity = captureOwnedIdentity(this.proc.pid); }
         catch (e) { this.fail("process", `Cannot verify interpreter ownership: ${String(e)}`); this.proc.kill(); }
       }
     });
@@ -123,10 +127,13 @@ export class ProcDriver extends EventEmitter {
     this.stopping = true;
     this.fail("process", "Interpreter stopped; operation cancelled.");
     try {
-      if (this.identity && !this.exited) stopOwnedProcessTree(this.identity);
+      // spawn() returns a PID before the 'spawn' event runs. A synchronous Stop
+      // in that gap must acquire proof now, not silently leave a live child.
+      if (process.platform === "linux" && this.ownTree && !this.identity && this.proc?.pid) this.identity = captureOwnedIdentity(this.proc.pid);
+      if (this.identity && (!this.exited || process.platform === "linux")) stopManagedTree(this.identity);
     } finally {
       // Kill only the direct child handle. Descendants require separate ownership proof.
-      if (this.proc && !this.exited) this.proc.kill();
+      if (this.proc && !this.exited && !(this.ownTree && process.platform === "linux")) this.proc.kill();
     }
   }
 }

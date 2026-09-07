@@ -4,12 +4,16 @@ A free musical playground for Windows. **Play with sound.** Start a groove, chan
 
 **Stack:** React + TypeScript + Vite studio → shared TypeScript project/MCP service → [TidalCycles](https://tidalcycles.org/) → [SuperCollider](https://supercollider.github.io/) / SuperDirt → WASAPI audio. Both interfaces share one recoverable project.
 
-> **Platform:** Windows 10/11 only (uses WASAPI + PowerShell helpers).
+> **Platform:** Windows 10/11 is the accepted audio baseline. P2.6 adds Ubuntu
+> development and tested Node runtime lifecycle support (Level B). Native Linux
+> audio is unvalidated; Windows revalidation of P2.6 is pending. See
+> [Ubuntu setup and status](docs/p26-ubuntu-portability.md).
 
 ---
 
 P2.5 is complete. See [HANDOFF.md](HANDOFF.md) for the accepted checkpoint,
-new Windows laptop setup and next-task boundary. P3 has not started.
+Windows laptop setup and next-task boundary. [P2.6 portability](tasks/TASK-2.6.md)
+is the current task; its native-audio and Windows gates remain open. P3 has not started.
 
 ## Screenshots
 
@@ -49,6 +53,9 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 ---
 
 ## Prerequisites
+
+These are the proven Windows prerequisites. Ubuntu development and the proposed
+native-audio setup are documented separately in [P2.6](docs/p26-ubuntu-portability.md).
 
 Install these once (all free):
 
@@ -97,6 +104,11 @@ Developer diagnostics in System reveals captured interpreter output without
 opening consoles. See the [P2.5 implementation and validation report](docs/p25-runtime-control-center.md).
 
 ### Paths
+The defaults below describe Windows and remain unchanged there. Linux uses
+native executable discovery and workspace-specific XDG storage; see the complete
+[Linux environment table](docs/p26-ubuntu-portability.md#configuration-and-local-state).
+The backend reads externally supplied environment variables; it does not load `.env` files.
+
 Paths now **auto-detect**: the project root resolves from the repo, `sclang.exe` is found
 under `C:\Program Files\SuperCollider-*`, GHCup defaults to `C:\ghcup`, and Dirt-Samples uses
 `%LOCALAPPDATA%`. If your installs live elsewhere, override with environment variables:

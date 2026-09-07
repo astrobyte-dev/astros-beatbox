@@ -1,6 +1,6 @@
 import { ProcDriver } from "./proc.js";
 import { sclangFrame } from "./protocol.js";
-import { SCLANG, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, AUDIO_DEVICE_FILE, DIRT_SAMPLES_DIR } from "./config.js";
+import { SCLANG, SCSYNTH, AUDIO_CAPABILITIES, DEFAULT_AUDIO_DEVICE, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, AUDIO_DEVICE_FILE, DIRT_SAMPLES_DIR } from "./config.js";
 import { scStr } from "./track.js";
 
 // Drives a headless sclang interpreter (the SuperDirt audio engine).
@@ -34,7 +34,9 @@ export class Sclang extends ProcDriver {
     // tell the startup where the audio-device file lives (keeps the user's path out
     // of the committed .scd; the .scd uses ~devFile if set, else a relative fallback).
     const dev = AUDIO_DEVICE_FILE.replace(/\\/g, "/");
-    await this.eval(`~devFile = "${scStr(dev)}"; ~samplePath = "${scStr(DIRT_SAMPLES_DIR.replace(/\\/g, "/"))}/*"; "${scStr(path)}".load;`);
+    const setup = `~abxJack = ${AUDIO_CAPABILITIES.backend === "jack"}; ~abxWindows = ${process.platform === "win32"}; ~abxDefaultDevice = "${scStr(DEFAULT_AUDIO_DEVICE)}"; `;
+    const server = SCSYNTH ? `Server.program = "${scStr(SCSYNTH.replace(/\\/g, "/"))}"; ` : "";
+    await this.eval(setup + server + `~devFile = "${scStr(dev)}"; ~samplePath = "${scStr(DIRT_SAMPLES_DIR.replace(/\\/g, "/"))}/*"; "${scStr(path)}".load;`);
     await this.waitFor(SUPERDIRT_READY, timeoutMs);
   }
 }

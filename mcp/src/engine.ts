@@ -8,7 +8,7 @@ import { CHANNEL_SYNTH } from "./project-compiler.js";
 import { PREVIEW_SYNTHS } from "./preview.js";
 import path from "node:path";
 import { soundLibrary, fingerprint, resolveSample, type Asset } from "./sound-library.js";
-import { DIRT_SAMPLES_DIR } from "./config.js";
+import { DIRT_SAMPLES_DIR, AUDIO_CAPABILITIES } from "./config.js";
 import { METER_UDP_PORT, AUDIO_DEVICE_FILE, DEFAULT_AUDIO_DEVICE, SCOPE_ENABLED, SCOPE_RMS_HZ, SCOPE_WAVE_N, SCOPE_WAVE_MS } from "./config.js";
 
 // Never take over another server. Only probe availability; do not identify or kill
@@ -31,6 +31,7 @@ export class Engine extends EventEmitter {
   state: "idle" | "booting" | "ready" | "degraded" | "error" = "idle";
   error: string | null = null;
   devices: string[] = [];        // available audio output devices (WASAPI)
+  readonly audioCapabilities = AUDIO_CAPABILITIES;
   currentDevice = "";            // device the engine is (re)booting with
   private bootPromise: Promise<void> | null = null;
   generation = 0;
@@ -194,6 +195,7 @@ export class Engine extends EventEmitter {
   // echo-proof (assembled at runtime: "AUDIO" ++ "DEV<<" never appears verbatim in
   // the echoed stdin, so the regex only matches the actual postln output).
   private async queryDevices(): Promise<void> {
+    if (!AUDIO_CAPABILITIES.deviceSelection) { this.devices = []; return; }
     try {
       const result = await this.sclang.eval(
         `ServerOptions.devices.do { |d| ("AUDIO" ++ "DEV<<" ++ d ++ ">>").postln }; ("AUDIO" ++ "DEVDONE").postln;`,

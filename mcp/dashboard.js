@@ -215,6 +215,7 @@
 
   var lastDevSig="";
   function updateAudio(st){ var sel=document.getElementById("audioSelect"); if(!sel)return;
+    var caps=st.audioCapabilities; sel.disabled=!!caps && !caps.deviceSelection; sel.title=caps ? caps.configuration : "";
     var devs=st.devices||[],sig=devs.join("|");
     if(sig!==lastDevSig){ lastDevSig=sig;
       sel.innerHTML='<option value="">audio out…</option><option value="SYSTEM">System default</option>'
