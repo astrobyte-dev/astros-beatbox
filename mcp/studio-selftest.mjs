@@ -336,6 +336,10 @@ try {
   await page.reload();
   await pad(15).waitFor();
   assert.equal(await pad(15).getAttribute("aria-pressed"), "true");
+  assert.equal(app.rig.stopped, true, "P3 complete projects reopen stopped");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await wait(() => !app.rig.paused);
+  await sync();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await wait(() => app.rig.paused);
   await sync();

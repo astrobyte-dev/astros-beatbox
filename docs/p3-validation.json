@@ -1,0 +1,76 @@
+{
+  "platform": "Ubuntu 24.04.4 LTS x86_64",
+  "node": "24.14.0",
+  "npm": "11.9.0",
+  "branch": "feat/p3-composition-performance",
+  "baseBranch": "feat/p2.6-ubuntu-portability",
+  "baseCommit": "be2e73011bccbb19b6a2203ed1aabcd4f14ea186",
+  "baseline": {
+    "discovered": 177,
+    "passed": 174,
+    "skipped": 3,
+    "failed": 0,
+    "build": "passed",
+    "serverTypecheck": "passed",
+    "studioTypecheck": "passed",
+    "browserJourneys": "classic, Studio, P2 and System passed",
+    "linuxRuntime": "passed"
+  },
+  "automated": {
+    "discovered": 203,
+    "passed": 200,
+    "skipped": 3,
+    "failed": 0,
+    "newP3Tests": 26,
+    "skips": "existing native Windows-only tests",
+    "build": "passed",
+    "serverTypecheck": "passed",
+    "studioTypecheck": "passed"
+  },
+  "journeys": {
+    "browser-selftest.mjs": "passed (fake audio)",
+    "studio-selftest.mjs": "passed (fake audio)",
+    "p2-selftest.mjs": "passed (fake audio)",
+    "system-selftest.mjs": "passed (fake audio)",
+    "linux-runtime-selftest.mjs": "passed (real Node lifecycle, no audio)",
+    "p3-selftest.mjs": "passed (fake audio)"
+  },
+  "timing": {
+    "validation": "deterministic cycle/protocol/compiler fixtures; actual HTTP/MCP/browser adapters",
+    "browserClockAuthority": false,
+    "nodeObserverSchedulesMusic": false,
+    "zeroClientObservationContract": "passed",
+    "nativeHaskellExecution": "not run",
+    "nativeAudioTiming": "not validated"
+  },
+  "review": [
+    "scene-copy reducer remains deterministic",
+    "stable IDs, clip independence and reference/history checks",
+    "shared Tidal play-map swap with explicit cycle acknowledgement",
+    "project switch clears old performance and reopens stopped",
+    "live restart preserves current mixer/tempo with launched musical material",
+    "automation overrides base value while preserving velocity",
+    "failed drafts and declarations retained through recovery",
+    "external state blocks implicit overwrite",
+    "stale arrangement repeat draft rejected in browser",
+    "historical Windows screenshots preserved"
+  ],
+  "p26Status": {
+    "level": "B \u2014 Ubuntu Runtime Safe",
+    "pr": 4,
+    "draft": true,
+    "merged": false,
+    "windowsAcceptance": "pending"
+  },
+  "p3Acceptance": {
+    "implementation": "implemented; portable tests and browser validation passed",
+    "nativeLinuxAudio": "not validated",
+    "windowsDesktopAudio": "pending",
+    "crossPlatformCompletion": false,
+    "fullNativeAcceptance": false
+  },
+  "systemPackagesModified": false,
+  "p35Started": false,
+  "p4Started": false,
+  "p5Started": false
+}

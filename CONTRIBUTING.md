@@ -36,6 +36,13 @@ sets/*.tidal               saved jams
 
 ## Dev workflow
 
+P3 development is stacked on the unmerged P2.6 branch. Read
+[the P3 contract and validation limits](docs/p3-composition-performance.md).
+`npm run selftest:p3` runs the production Studio/MCP journey with explicit cycle
+fixtures and fake audio. It does not establish native scene timing or Windows
+acceptance. Existing browser journeys preserve Play/reconnect/recording checks
+after explicitly verifying that complete projects reopen stopped.
+
 For Ubuntu, start with [P2.6 setup and status](docs/p26-ubuntu-portability.md).
 Portable development and native Node lifecycle checks pass; native audio remains
 unvalidated and the P2.6 Windows acceptance gate is pending. The Windows workflow

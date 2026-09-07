@@ -30,6 +30,8 @@ export interface StudioState {
     recoveryWarning: string | null;
   };
   projectRuntime: {
+    performance?: import("./performance.js").PerformanceState;
+    externallyModified?: boolean;
     appliedRevision: number | null;
     appliedProjectId: string | null;
     song: boolean;

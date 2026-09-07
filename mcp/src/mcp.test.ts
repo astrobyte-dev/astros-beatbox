@@ -15,7 +15,7 @@ test("existing MCP launch exposes shared validation, session IDs and isError fai
   const client = new Client({ name: "p0a-test", version: "1" });
   try {
     await client.connect(transport);
-    const listed = await client.listTools(); assert.deepEqual(listed.tools.map((t) => t.name).filter(n => !n.startsWith("project_")).sort(), ["boot", "eval_sc", "eval_tidal", "hush", "status"]);
+    const listed = await client.listTools(); assert.deepEqual(listed.tools.map((t) => t.name).filter(n => !n.startsWith("project_")).sort(), ["arrangement_start", "arrangement_stop", "boot", "eval_sc", "eval_tidal", "hush", "managed_code_apply", "performance_return", "scene_launch", "status"]);
     assert.ok(listed.tools.some(t => t.name === "project_edit"));
     const status = await client.callTool({ name: "status", arguments: {} });
     const state = JSON.parse((status.content as { text: string }[])[0].text);

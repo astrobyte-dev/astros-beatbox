@@ -31,5 +31,6 @@ jobs:
       - run: npm run selftest:studio
       - run: npm run selftest:p2
       - run: npm run selftest:system
+      - run: npm run selftest:p3
       - if: runner.os == 'Linux'
         run: npm run selftest:linux
