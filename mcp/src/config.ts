@@ -1,18 +1,23 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
+import { PLATFORM, findExecutable, linuxLocations, audioCapabilities } from "./platform.js";
 
 // Project root, resolved from this file's location so the rig is portable:
 // compiled config.js lives at <root>/mcp/dist/config.js -> root is two dirs up.
 // Override with TIDAL_HOME if you keep the project somewhere unusual.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIVECODING = process.env.TIDAL_HOME ?? path.resolve(HERE, "..", "..");
+const linux = linuxLocations(LIVECODING);
+const windows = PLATFORM === "win32";
+export const AUDIO_CAPABILITIES = audioCapabilities(PLATFORM, process.env.TIDAL_SC_BACKEND);
 
 // --- external toolchains: override via env vars, else sensible Windows defaults ---
 
 // SuperCollider: env TIDAL_SCLANG, else newest "SuperCollider-*" under Program Files.
 function findSclang(): string {
   if (process.env.TIDAL_SCLANG) return process.env.TIDAL_SCLANG;
+  if (!windows) return findExecutable("sclang");
   const pf = process.env.ProgramFiles ?? "C:\\Program Files";
   try {
     const dirs = readdirSync(pf).filter((d) => d.startsWith("SuperCollider")).sort().reverse();
@@ -23,11 +28,12 @@ function findSclang(): string {
 export const SCLANG = findSclang();
 
 // GHCup (provides ghci + cabal + the mingw64 tidal-link deps). Override base with TIDAL_GHCUP.
-const GHCUP = process.env.TIDAL_GHCUP ?? "C:\\ghcup";
-export const GHCI = process.env.TIDAL_GHCI ?? path.join(GHCUP, "bin", "ghci.exe");
-export const CABAL_DIR = process.env.CABAL_DIR ?? "C:\\cabal";
+const GHCUP = process.env.TIDAL_GHCUP ?? (windows ? "C:\\ghcup" : linux.ghcup);
+export const GHCI = windows ? process.env.TIDAL_GHCI ?? path.join(GHCUP, "bin", "ghci.exe") : findExecutable("ghci", process.env.TIDAL_GHCI, [path.join(GHCUP, "bin", "ghci")]);
+export const SCSYNTH = windows ? process.env.TIDAL_SCSYNTH : findExecutable("scsynth", process.env.TIDAL_SCSYNTH);
+export const CABAL_DIR = process.env.CABAL_DIR ?? (windows ? "C:\\cabal" : undefined);
 // ghci needs ghcup bin (its own runtime) + mingw64 (tidal-link C++ deps) on PATH.
-export const GHCI_PATH = [path.join(GHCUP, "bin"), path.join(GHCUP, "msys64", "mingw64", "bin"), process.env.PATH ?? ""].join(path.delimiter);
+export const GHCI_PATH = [path.join(GHCUP, "bin"), ...(windows ? [path.join(GHCUP, "msys64", "mingw64", "bin")] : []), process.env.PATH ?? ""].join(path.delimiter);
 
 // Rig files — always inside the project, so portable automatically.
 export const SUPERDIRT_STARTUP = path.join(LIVECODING, "sc", "superdirt_startup.scd");
@@ -69,17 +75,17 @@ export const SCOPE_WAVE_MS = Number(process.env.TIDAL_SCOPE_MS ?? 48);
 // Audio output device. The startup .scd reads the device name from this file at boot
 // (empty/absent or "SYSTEM" = let the OS pick). The dashboard writes it + reboots to
 // switch outputs. For reliable HEADLESS audio pick a "Windows WASAPI : <output>" device.
-export const AUDIO_DEVICE_FILE = path.join(LIVECODING, "audio_device.txt");
+export const AUDIO_DEVICE_FILE = process.env.TIDAL_AUDIO_DEVICE_FILE ?? path.join(windows ? LIVECODING : linux.config, "audio_device.txt");
 export const DEFAULT_AUDIO_DEVICE = process.env.TIDAL_AUDIO_DEVICE ?? "System default";
 
 // Saved jams, recordings, and the sample library (for the dashboard browser).
-export const SETS_DIR = path.join(LIVECODING, "sets");
-export const PROJECTS_DIR = process.env.TIDAL_PROJECTS_DIR ?? path.join(LIVECODING, "projects");
-export const RECOVERY_DIR = process.env.TIDAL_RECOVERY_DIR ?? path.join(LIVECODING, ".abx-recovery");
-export const RECORDINGS_DIR = process.env.TIDAL_RECORDINGS_DIR ?? path.join(LIVECODING, "recordings");
+export const SETS_DIR = process.env.TIDAL_SETS_DIR ?? path.join(windows ? LIVECODING : linux.data, "sets");
+export const PROJECTS_DIR = process.env.TIDAL_PROJECTS_DIR ?? path.join(windows ? LIVECODING : linux.data, "projects");
+export const RECOVERY_DIR = process.env.TIDAL_RECOVERY_DIR ?? (windows ? path.join(LIVECODING, ".abx-recovery") : linux.state);
+export const RECORDINGS_DIR = process.env.TIDAL_RECORDINGS_DIR ?? path.join(windows ? LIVECODING : linux.data, "recordings");
 // Dirt-Samples quark (per-user). Uses %LOCALAPPDATA% so it isn't tied to one username.
 export const DIRT_SAMPLES_DIR = process.env.TIDAL_DIRT_SAMPLES
-  ?? path.join(
+  ?? (windows ? path.join(
     process.env.LOCALAPPDATA ?? path.join(process.env.USERPROFILE ?? "C:\\Users\\Default", "AppData", "Local"),
     "SuperCollider", "downloaded-quarks", "Dirt-Samples",
-  );
+  ) : linux.samples);

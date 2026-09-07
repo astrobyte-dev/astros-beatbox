@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-const FLOOR = 157; // P0a–P2, P2.5 lifecycle, and recording diagnostics/stale-start regressions.
+const FLOOR = 176; // P0a–P2.5 plus P2.6 portable/Linux ownership and capability regressions.
 
 const distDir = join(dirname(fileURLToPath(import.meta.url)), "dist");
 let files = [];

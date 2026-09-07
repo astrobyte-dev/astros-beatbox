@@ -1,0 +1,67 @@
+{
+  "phase": "P2.6",
+  "platform": "Ubuntu 24.04.4 LTS x86_64",
+  "date": "2026-09-07",
+  "baseline": "96bde6efed8c0f6859952a008d11c69c00a5f844",
+  "level": "B - Ubuntu Runtime Safe (real Node runtime/descendant fixtures)",
+  "toolchain": {
+    "node": "24.14.0",
+    "npm": "11.9.0",
+    "python": "3.12 (system; pidfd capability checked)"
+  },
+  "build": "pass",
+  "typecheck": {
+    "server": "pass",
+    "studio": "pass"
+  },
+  "tests": {
+    "discovered": 176,
+    "passed": 173,
+    "failed": 0,
+    "skipped": 3,
+    "newTests": 19,
+    "skips": "Existing native Windows ownership/inventory tests"
+  },
+  "browser": {
+    "classic": "pass",
+    "studio": "pass",
+    "p2FakeAudio": "pass",
+    "system": "pass",
+    "desktopDefault": "Actual xdg-open Studio request observed"
+  },
+  "linuxLifecycle": [
+    "creation identity and stale identity rejection",
+    "dedicated child sessions",
+    "descendant and separate-session child cleanup",
+    "SIGTERM then SIGKILL escalation",
+    "explicit deadline failure and deliberate retry",
+    "TCP/UDP socket release",
+    "unrelated process preservation",
+    "real driver application Stop/Restart/Quit",
+    "cold runtime launch",
+    "second-launch same session/runtime reuse",
+    "browser failure preserves runtime",
+    "SIGTERM/SIGINT/SIGHUP runtime shutdown",
+    "external HTTP conflict preserved"
+  ],
+  "nativeAudio": {
+    "status": "not attempted / not validated",
+    "blocker": "Pre-existing half-configured linux-image-7.0.0-28-generic; apt simulation would configure unrelated pending kernel packages"
+  },
+  "windows": "WINDOWS REVALIDATION IS PENDING; no desktop/audio acceptance claimed",
+  "installed": [
+    "user-level nvm Node 24.14.0 with npm 11.9.0",
+    "123 locked npm packages",
+    "Playwright Chromium, headless shell and ffmpeg cache"
+  ],
+  "systemPackagesInstalled": [],
+  "globalAudioChanges": [],
+  "p3Started": false,
+  "limitations": [
+    "No native Linux audio claim",
+    "No durable adoption after owner death",
+    "Unobserved daemonized descendants escaping ancestry/session are outside managed scope",
+    "Synchronous bounded cleanup pauses HTTP",
+    "Windows desktop/audio gate required before cross-platform-safe merge"
+  ]
+}
