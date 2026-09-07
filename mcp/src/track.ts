@@ -12,7 +12,8 @@ export interface RigState {
 // Approximate parse of evaluated Tidal to track what each d-slot is doing.
 // Not a real Haskell parser — just enough for the dashboard to render. Handles a
 // `do { ...; ... }` wrapper (splits on ';'), `setcps`, `dN silence`, and `dN $ ...`.
-export function track(rig: RigState, code: string): void {
+export function track(rig: RigState, code: string): boolean {
+  let tracked = true;
   let c = code.trim();
   const wrap = c.match(/^do\s*\{([\s\S]*)\}\s*$/);
   if (wrap) c = wrap[1];
@@ -24,7 +25,14 @@ export function track(rig: RigState, code: string): void {
     if ((m = st.match(/^setcps\s+([0-9.]+)\s*$/))) { rig.tempoBpm = parseFloat(m[1]) * 60 * (rig.beatsPerCycle ?? 4); continue; }
     if ((m = st.match(/^(d(?:[1-9]|1[0-6]))\s+silence\s*$/))) { delete rig.slots[m[1]]; rig.muted.delete(m[1]); if (rig.solo === m[1]) rig.solo = null; continue; }
     if ((m = st.match(/^(d(?:[1-9]|1[0-6]))\s+(?:\$\s*([\s\S]+)|(\([\s\S]+\)))$/))) { rig.slots[m[1]] = (m[2] ?? m[3]).trim(); rig.muted.delete(m[1]); continue; }
+    tracked = false;
   }
+  return tracked;
+}
+
+export function isTrackedTidal(code: string): boolean {
+  if (/^\s*hush\s*;?\s*$/.test(code)) return true;
+  return track({ slots: {}, tempoBpm: 0, muted: new Set(), solo: null }, code);
 }
 
 // Recognize only explicit top-level assignments; opaque expressions remain

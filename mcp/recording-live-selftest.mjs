@@ -38,7 +38,7 @@ try {
   await send("resume");await record("immediate first Play");
   const preview=app.sounds().find(s=>s.bank==="sd").key;
   for(let i=0;i<4;i++){
-    await send("project.new");await delay([0,17,63,177][i]);await send("project.load",{value:"ordering"});
+    await send("project.new");await delay([0,17,63,177][i]);await send("project.load",{value:"ordering"});assert.equal(app.rig.stopped,true,"P3 reopens stopped");await send("resume");
     await record(`project switch ${i+1}`,true,async()=>{await send("preview.play",{value:preview});await send("preview.stop");});
     await send("solo",{slot:"d2"});await send("mute",{slot:"d2"});await send("unmute",{slot:"d2"});await send("unsolo");
     await record(`mixer restore ${i+1}`);

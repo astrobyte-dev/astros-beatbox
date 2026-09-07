@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { validateCommand, requiresProjectRevision, type Command, type CommandResult } from "./commands.js";
-import { track, scStr, type RigState } from "./track.js";
+import { track, isTrackedTidal, scStr, type RigState } from "./track.js";
 import type { EvalResult } from "./protocol.js";
 import { ProjectService, ProjectConflict } from "./project-service.js";
 import { ProjectStorage } from "./project-storage.js";
@@ -11,6 +11,7 @@ import { projectSlots, compileArrangement, mixerCommand } from "./project-compil
 import { libraryAsset, resolveSample, soundLibrary } from "./sound-library.js";
 import { Preview } from "./preview.js";
 import { RecordingCatalog, validateWav } from "./recordings.js";
+import { emptyPerformance, sceneProjection, arrangementPosition, preparedBatch, preparedCode, parseCycle, type Boundary } from "./performance.js";
 import type { Asset } from "./sound-library.js";
 import { captureRoute, captureInput, finishRecorder, recordingWarning, type RecordingDiagnostics } from "./recording-diagnostics.js";
 
@@ -20,7 +21,7 @@ export interface CommandEngine {
   ensureBooted(): Promise<void>; reboot(): Promise<void>; assertGeneration(generation: number): void;
   assertSampleLoaded?(asset: Asset): void;
   stop?(): void;
-  tidal: { eval(code: string, id?: string): Promise<EvalResult>; hush(id?: string): Promise<EvalResult> };
+  tidal: { clock?(): Promise<number>; eval(code: string, id?: string): Promise<EvalResult>; hush(id?: string): Promise<EvalResult> };
   sclang: { eval(code: string, id?: string): Promise<EvalResult>; evalRoutine(code: string, id?: string): Promise<EvalResult> };
 }
 export interface ApplicationPaths { sets: string; recordings: string; device: string; projects?: string; recovery?: string; samples?: string }
@@ -50,6 +51,12 @@ export class Application {
   lifecycleHooks: { restartServices?: () => Promise<void>; quit?: () => Promise<void>; log?: (source: "runtime" | "recording", message: string, error?: boolean) => void } = {};
   private savedProject: { id: string; revision: number } | null = null;
   get savedState() { const p = this.project.document; return this.savedProject?.id === p.id && this.savedProject.revision === p.revision ? "saved" : "unsaved"; }
+  readonly performance = emptyPerformance();
+  private performanceDocument: ProjectDocument | null = null;
+  private clockTimer: ReturnType<typeof setInterval> | undefined;
+  private observing = false;
+  private performanceGeneration: number | null = null;
+  private external = false;
   readonly runtime = { appliedRevision: null as number | null, appliedProjectId: null as string | null, song: false, error: null as string | null };
   constructor(readonly engine: CommandEngine, private paths: ApplicationPaths) {
     this.recordings = new RecordingCatalog(paths.recordings);
@@ -58,11 +65,12 @@ export class Application {
     if (this.project.workspace.recovered) { this.projectRig(); this.rig.stopped = true; this.rig.paused = true; }
   }
   projectState() {
+    if (this.performanceDocument && (!this.engine.running || this.performanceGeneration !== this.engine.generation || this.engine.state === "degraded" || this.engine.state === "error")) this.performance.clock = "unavailable";
     if (this.rig.recording && (!this.engine.running || this.recordingGeneration !== this.engine.generation) && this.recordingId) {
       this.recordings.fail(this.recordingId, "Audio engine ended before this take could be finalized.", "interrupted");
       this.rig.recording = false;
     }
-    return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.project.assets(this.paths.samples), preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
+    return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.project.assets(this.paths.samples), preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
   }
   sounds() { return soundLibrary(this.paths.samples); }
   async drain() { await this.queue; }
@@ -142,8 +150,8 @@ export class Application {
     return { ok: false, operationId: id, sessionId: this.sessionId, generation: this.engine.generation, projectId: this.project.document.id, revision: this.project.document.revision, code, error: (e instanceof Error ? e.message : String(e)).slice(-16000) };
   }
   private managed(p = this.project.document): boolean { return p.clips.some(c => c.kind === "steps" || c.managed); }
-  private async verifySamples(p: ProjectDocument, id: string): Promise<void> {
-    const active = new Set(this.runtime.song ? p.arrangement.flatMap(a => Object.values(p.scenes.find(s => s.id === a.sceneId)!.clips)) : p.tracks.map(t => t.activeClipId));
+  private async verifySamples(p: ProjectDocument, id: string, song = this.runtime.song): Promise<void> {
+    const active = new Set(song ? p.arrangement.flatMap(a => Object.values(p.scenes.find(s => s.id === a.sceneId)!.clips)) : p.tracks.map(t => t.activeClipId));
     const assets = new Set(p.clips.filter(c => active.has(c.id) && c.kind === "steps").map(c => (c as { assetId: string }).assetId));
     const checks: string[] = [];
     for (const a of p.assets) if (assets.has(a.id) && a.kind === "sample" && a.source && resolveSample(a, this.paths.samples).status === "available") {
@@ -156,7 +164,7 @@ export class Application {
     }
     if (checks.length) await this.sc(checks.join(" ") + " s.sync;", id, true);
   }
-  private audioSlots(p: ProjectDocument): Record<string, string> {
+  private audioSlots(p: ProjectDocument, song = this.runtime.song): Record<string, string> {
     // SuperDirt wraps out-of-range sample indices. Silence explicitly missing
     // references instead of allowing that silent substitution, retaining the document.
     const missing = new Set(this.project.assets(this.paths.samples, p).filter(a => a.status === "missing").map(a => a.id));
@@ -167,14 +175,16 @@ export class Application {
     for (const a of safe.assets) if (a.kind === "sample") a.index = resolveSample(a, this.paths.samples).index;
     for (const t of safe.tracks) if (t.activeClipId && clips.has(t.activeClipId)) t.activeClipId = null;
     for (const s of safe.scenes) for (const k of Object.keys(s.clips)) if (s.clips[k] && clips.has(s.clips[k]!)) s.clips[k] = null;
-    return this.runtime.song ? compileArrangement(safe) : projectSlots(safe);
+    return song ? compileArrangement(safe) : projectSlots(safe);
   }
   private async applyProject(next: ProjectDocument, previous: ProjectDocument, id: string, force = false): Promise<void> {
+    if (this.external) { this.runtime.appliedRevision = null; return; }
     if (!this.engine.running) { this.runtime.appliedRevision = null; this.rig.synchronized = false; return; }
+    const performing = this.performanceDocument !== null;
     const before = this.audioSlots(previous), after = this.audioSlots(next);
     const mixing = this.managed(next) || this.managed(previous);
     try {
-      if (!this.rig.stopped && !this.rig.paused && (force || JSON.stringify(before) !== JSON.stringify(after))) await this.verifySamples(next, id);
+      if (!performing && !this.rig.stopped && !this.rig.paused && (force || JSON.stringify(before) !== JSON.stringify(after))) await this.verifySamples(next, id);
       if (mixing && (force || mixerCommand(next) !== mixerCommand(previous))) await this.sc(mixerCommand(next), id, true);
       const solo = next.tracks.some(t => t.mixer.solo);
       for (const t of next.tracks.filter(t => t.channel === null)) {
@@ -183,18 +193,30 @@ export class Application {
         if (force || muted !== wasMuted) await this.tidal(`${muted ? "mute" : "unmute"} ${t.slot}`, id);
       }
       if (force || JSON.stringify(next.tempo) !== JSON.stringify(previous.tempo)) await this.tidal(`setcps (${next.tempo.bpm}/60/${next.tempo.beatsPerCycle})`, id);
-      if (!this.rig.stopped && !this.rig.paused) {
+      if (!performing && !this.rig.stopped && !this.rig.paused) {
         for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) if (force || before[k] !== after[k]) await this.tidal(after[k] ? `${k} $ ${after[k]}` : `${k} silence`, id);
       }
       if (force) this.rig.synchronized = true;
     } catch (e) { this.rig.synchronized = false; this.runtime.error = String(e); this.runtime.appliedRevision = null; throw e; }
   }
   private markApplied(): void {
-    if (this.engine.running && this.rig.synchronized) { this.runtime.appliedRevision = this.project.document.revision; this.runtime.appliedProjectId = this.project.document.id; this.appliedGeneration = this.engine.generation; this.runtime.error = null; }
+    if (this.engine.running && this.rig.synchronized && !this.external && !this.performanceDocument) { this.runtime.appliedRevision = this.project.document.revision; this.runtime.appliedProjectId = this.project.document.id; this.appliedGeneration = this.engine.generation; this.runtime.error = null; }
   }
   private async changeProject(next: ProjectDocument, c: Command, id: string, mode: "edit" | "undo" | "redo" | "switch" = "edit"): Promise<void> {
     const previous = this.project.document;
+    if (mode === "switch" && this.external) throw new Error("Return to the managed project before opening another jam; external audio has not been stopped.");
+    if (mode !== "switch" && this.performanceDocument && !this.rig.stopped) {
+      const referenced = new Set([this.performance.sceneId, this.performance.queuedSceneId, ...this.performanceDocument.arrangement.map(e => e.sceneId)]);
+      if (next.tracks.some(t => { const old = previous.tracks.find(o => o.id === t.id); return old && (old.slot !== t.slot || old.channel !== t.channel); }) || previous.tracks.some(t => !next.tracks.some(n => n.id === t.id)) || previous.scenes.some(s => referenced.has(s.id) && !next.scenes.some(n => n.id === s.id))) throw new Error("Stop performance before removing its scenes, tracks or routes");
+    }
+    // Prepared code must compile before replacing any playing slot, even when stopped.
+    const code = next.clips.filter(c => c.kind === "code" && c.managed && !previous.clips.some(old => old.id === c.id && old.kind === "code" && old.source === c.source));
+    if (this.engine.running && !this.external) for (const c of code) if (c.kind === "code") await this.tidal(preparedCode(c.source), id);
     try {
+      if (mode === "switch") {
+        if (this.engine.running && !this.external) await this.tidal("hush", id);
+        this.clearPerformance(); this.runtime.song = false; this.rig.stopped = true; this.rig.paused = true;
+      }
       await this.applyProject(next, previous, id, mode === "switch");
       if (mode === "switch") this.project.acceptSwitch(next);
       else if (mode === "undo" || mode === "redo") this.project.acceptHistory(mode === "redo", next);
@@ -226,6 +248,28 @@ export class Application {
       if (!target || target !== this.recordingId || !this.rig.recording) throw new Error(entry?.error ?? "This recording is not active or ready");
       await this.finishRecording(id); return { msg: this.recordings.get(target)?.warning ?? "Recording ready. Find it in Recordings." };
     }
+    if (c.cmd === "scene.launch") return this.launchScene(c.sceneId!, c.boundary ?? "cycle", !!c.repeat, id);
+    if (c.cmd === "performance.return") {
+      const wasExternal = this.external;
+      if (wasExternal && (this.rig.recording || this.recorderUncertain)) await this.finishRecording(id);
+      this.external = false; this.clearPerformance(); this.runtime.song = false;
+      try {
+        if (wasExternal) await this.engine.reboot(); else await this.engine.ensureBooted();
+        this.rig.stopped = false; this.rig.paused = false;
+        await this.restore(id);
+      } catch (e) { this.external = wasExternal; this.rig.synchronized = false; throw e; }
+      return { msg: "Returned to the managed project" };
+    }
+    if (c.cmd === "code.apply") {
+      if (this.external) throw new Error("Return to the managed project before applying code");
+      const clip = this.project.document.clips.find(clip => clip.id === c.clipId);
+      if (!clip || clip.kind !== "code" || !clip.managed || !clip.draft?.trim()) throw new Error("Save a managed code draft first");
+      await this.engine.ensureBooted();
+      await this.tidal(preparedCode(clip.draft), id);
+      const next = { ...clip, source: clip.draft }; delete next.draft;
+      await this.changeProject(this.project.prepare([{ type: "clip.put", clip: next }]), { ...c, label: "Apply managed code" }, id);
+      return { msg: this.performanceDocument ? "Code prepared and saved; relaunch the scene to hear the edit" : "Managed code applied" };
+    }
     if (c.cmd === "project.edit") { await this.changeProject(this.project.prepare(c.edits), c, id); for (const e of c.edits!) if (e.type === "scene.activate") this.project.workspace.selectedSceneId = e.sceneId; return { msg: c.label! }; }
     if (c.cmd === "project.undo" || c.cmd === "project.redo") { const redo = c.cmd === "project.redo"; await this.changeProject(this.project.historyTarget(redo), c, id, redo ? "redo" : "undo"); return { msg: redo ? "Redone" : "Undone" }; }
     if (c.cmd === "project.save") { if (!this.project.storage) throw new Error("Project storage not configured"); this.project.storage.save(String(c.value), this.project.document); this.savedProject = { id: this.project.document.id, revision: this.project.document.revision }; return { msg: "Saved complete project: " + c.value }; }
@@ -236,9 +280,14 @@ export class Application {
     }
     if (c.cmd === "song.start" || c.cmd === "song.stop") {
       if (c.cmd === "song.start" && !this.project.document.arrangement.length) throw new Error("Add scenes to the song chain first");
-      await this.engine.ensureBooted(); const previous = this.runtime.song; this.runtime.song = c.cmd === "song.start";
-      try { await this.restore(id); } catch (e) { this.runtime.song = previous; throw e; }
-      return { msg: this.runtime.song ? "Song arrangement enabled" : "Song arrangement disabled" };
+      if (this.external) throw new Error("Return to the managed project before performing");
+      if (c.cmd === "song.stop") {
+        if (this.engine.running) await this.tidal("hush", id);
+        this.clearPerformance(); this.runtime.song = false; this.rig.stopped = true; this.rig.paused = true;
+        return { msg: "Arrangement stopped; select a scene to perform" };
+      }
+      await this.installPerformance(this.project.document, "cycle", id, true);
+      return { msg: "Arrangement queued for next cycle" };
     }
     const p = this.project.document, t = p.tracks.find(t => "d" + t.slot === c.slot);
     if (c.cmd === "set" || t && this.managed(p) && ["mute", "unmute", "solo", "silence"].includes(c.cmd) || c.cmd === "unsolo" && this.managed(p)) {
@@ -257,6 +306,10 @@ export class Application {
         }
       }
       await this.changeProject(this.project.prepare(edits), c, id); return { msg: c.cmd + " " + (c.slot ?? "") };
+    }
+    if ((c.cmd === "eval" || c.cmd === "eval_sc" || c.cmd === "load") && this.performanceDocument) { this.external = true; this.clearPerformance(); this.runtime.song = false; this.rig.synchronized = false; this.runtime.appliedRevision = null; }
+    if (c.cmd === "eval_sc" || c.cmd === "eval" && !isTrackedTidal(String(c.value))) {
+      this.external = true; this.clearPerformance(); this.runtime.song = false; this.rig.synchronized = false; this.runtime.appliedRevision = null;
     }
     const musical = ["eval", "hush", "silence", "tempo", "mute", "unmute", "solo", "unsolo", "load"].includes(c.cmd);
     const saved = { slots: { ...this.rig.slots }, tempoBpm: this.rig.tempoBpm, muted: new Set(this.rig.muted), solo: this.rig.solo };
@@ -299,7 +352,14 @@ export class Application {
     this.engine.assertGeneration(gen); return result;
   }
   private async restore(id: string): Promise<void> {
+    if (this.external) throw new Error("Session is externally modified. Choose Return to managed project explicitly.");
     const r = this.rig;
+    if (this.performanceDocument && !r.stopped && !r.paused) {
+      const playing = clone(this.performanceDocument), authored = this.project.document;
+      playing.tempo = authored.tempo;
+      for (const track of playing.tracks) { const current = authored.tracks.find(t => t.id === track.id); if (current) track.mixer = current.mixer; }
+      await this.installPerformance(playing, "cycle", id, this.runtime.song, this.performance.queuedSceneId ?? this.performance.sceneId); return;
+    }
     if (this.managed()) {
       if (!r.stopped && !r.paused) await this.verifySamples(this.project.document, id);
       await this.tidal("hush", id); await this.tidal("unmuteAll >> unsoloAll", id);
@@ -319,6 +379,62 @@ export class Application {
     if (r.solo) await this.tidal(`solo ${r.solo.slice(1)}`, id);
     if (r.stopped || r.paused) await this.tidal("hush", id);
     r.synchronized = true;
+  }
+
+  private clearPerformance() {
+    clearInterval(this.clockTimer); this.clockTimer = undefined;
+    Object.assign(this.performance, emptyPerformance()); this.performanceDocument = null; this.performanceGeneration = null;
+  }
+  /** Consumes an engine clock observation; never schedules or changes music. */
+  observeCycle(cycle: number, generation = this.engine.generation): void {
+    if (!this.performanceDocument || generation !== this.performanceGeneration || !Number.isFinite(cycle)) return;
+    if (this.performance.cycle !== null && cycle < this.performance.cycle) { this.performance.clock = "unavailable"; return; }
+    this.performance.cycle = cycle; this.performance.clock = "observed";
+    if (this.performance.startCycle === null || cycle < this.performance.startCycle) return;
+    if (this.performance.mode === "arrangement") Object.assign(this.performance, arrangementPosition(this.performanceDocument, this.performance.startCycle, cycle));
+    else if (this.performance.queuedSceneId) this.performance.sceneId = this.performance.queuedSceneId;
+    this.performance.queuedSceneId = null;
+  }
+  private watchClock() {
+    clearInterval(this.clockTimer);
+    if (!this.engine.tidal.clock) return;
+    this.clockTimer = setInterval(() => {
+      if (this.observing || this.waiting || !this.performanceDocument) return;
+      if (!this.engine.running || this.engine.generation !== this.performanceGeneration) { this.performance.clock = "unavailable"; clearInterval(this.clockTimer); return; }
+      this.observing = true;
+      const generation = this.engine.generation, document = this.performanceDocument;
+      void this.engine.tidal.clock!().then(cycle => { if (document === this.performanceDocument) this.observeCycle(cycle, generation); }, () => { if (document === this.performanceDocument && generation === this.engine.generation) this.performance.clock = "unavailable"; }).finally(() => { this.observing = false; });
+    }, 250);
+    this.clockTimer.unref();
+  }
+  private async launchScene(sceneId: string, boundary: Boundary, repeat: boolean, id: string) {
+    if (this.external) throw new Error("Return to the managed project before performing");
+    if (!repeat && this.performanceDocument?.revision === this.project.document.revision && (this.performance.queuedSceneId === sceneId || this.performance.mode === "scene" && this.performance.sceneId === sceneId && !this.performance.queuedSceneId)) return { msg: "Scene already current or queued" };
+    const p = sceneProjection(this.project.document, sceneId);
+    await this.installPerformance(p, boundary, id, false, sceneId);
+    return { msg: boundary === "cycle" ? "Scene queued for next cycle" : "Scene launched" };
+  }
+  private async installPerformance(p: ProjectDocument, boundary: Boundary, id: string, song: boolean, sceneId: string | null = null) {
+    await this.engine.ensureBooted();
+    const oldSong = this.runtime.song, current = this.performance.sceneId;
+    try {
+      const active = new Set(song ? p.arrangement.flatMap(e => Object.values(p.scenes.find(s => s.id === e.sceneId)!.clips)) : p.tracks.map(t => t.activeClipId));
+      for (const clip of p.clips.filter(c => active.has(c.id))) if (clip.kind === "code") {
+        if (!clip.managed) throw new Error("Scene performance requires managed code routing. Raw session code remains available in the classic console.");
+        await this.tidal(preparedCode(clip.source), id);
+      }
+      await this.verifySamples(p, id, song);
+      await this.sc(mixerCommand(p), id, true);
+      await this.tidal(`setcps (${p.tempo.bpm}/60/${p.tempo.beatsPerCycle})`, id);
+      const slots = this.audioSlots(p, song);
+      const result = await this.tidal(preparedBatch(slots, boundary, song ? { cycles: p.arrangement.reduce((n, e) => n + e.cycles, 0), loop: p.arrangementLoop !== false } : undefined), id);
+      const start = parseCycle(result.output, "ABX_SCHEDULED");
+      this.clearPerformance(); this.runtime.song = song; this.performanceDocument = clone(p); this.performanceGeneration = this.engine.generation;
+      Object.assign(this.performance, { mode: song ? "arrangement" : "scene", sceneId: boundary === "immediate" ? sceneId : current, queuedSceneId: song ? p.arrangement[0].sceneId : boundary === "cycle" ? sceneId : null, startCycle: start });
+      this.rig.stopped = false; this.rig.paused = false; this.rig.synchronized = true;
+      this.runtime.appliedRevision = p.revision; this.runtime.appliedProjectId = p.id; this.appliedGeneration = this.engine.generation; this.runtime.error = null;
+      this.watchClock();
+    } catch (e) { this.runtime.song = oldSong; this.rig.synchronized = false; this.runtime.appliedRevision = null; this.runtime.error = "Performance application unconfirmed; prior patterns retained where possible. " + String(e); throw e; }
   }
 
   private traceCommand(command: string, phase: "begin" | "complete" | "failed") {
@@ -407,13 +523,13 @@ export class Application {
         this.transition(c.cmd, "Restarting telemetry");
         await this.lifecycleHooks.restartServices?.();
       }
-      await this.engine.reboot(); this.rig.recording = false; this.recorderUncertain = false;
+      await this.engine.reboot(); this.external = false; this.rig.recording = false; this.recorderUncertain = false;
       await this.restore(id);
     } else {
       this.transition(c.cmd, "Stopping owned audio processes");
       this.engine.stop();
       this.rig.recording = false; this.recorderUncertain = false;
-      this.rig.stopped = true; this.rig.paused = true; this.runtime.song = false;
+      this.clearPerformance(); this.rig.stopped = true; this.rig.paused = true; this.runtime.song = false;
       this.runtime.appliedRevision = null; this.appliedGeneration = null;
     }
     // Retain HTTP on any failure so the user can inspect and retry cleanup.
@@ -436,6 +552,7 @@ export class Application {
     if (c.cmd === "stop" || c.cmd === "pause" || c.cmd === "hush") {
       if (this.engine.running) await this.tidal("hush", id);
       else if (this.engine.state !== "idle") throw new Error("Engine unavailable: silence could not be confirmed. " + (this.engine.error ?? ""));
+      this.clearPerformance(); this.runtime.song = false;
       r.stopped = true; r.paused = true;
       if (c.cmd === "hush") { r.slots = {}; r.muted.clear(); r.solo = null; }
       return { msg: c.cmd === "hush" ? "hush — patterns cleared" : "stopped — patterns kept; press Play to resume" };
@@ -449,7 +566,7 @@ export class Application {
       }
       if (c.cmd === "setdevice") { mkdirSync(path.dirname(this.paths.device), { recursive: true }); writeFileSync(this.paths.device, String(c.value).trim(), "utf8"); }
       r.synchronized = false;
-      await this.engine.reboot(); r.recording = false; this.recorderUncertain = false; await this.restore(id);
+      await this.engine.reboot(); this.external = false; r.recording = false; this.recorderUncertain = false; await this.restore(id);
       if (recordingFailure) throw new Error("Engine restarted and patterns restored. " + recordingFailure);
       return { msg: "engine restarted; patterns and mute/solo settings restored" };
     }
@@ -494,9 +611,9 @@ export class Application {
         const saved = { ...r.slots }, bpm = r.tempoBpm;
         await this.tidal("hush", id);
         const next: LiveRig = { ...r, slots: {}, muted: new Set(), solo: null, stopped: false, paused: false };
-        try { for (const line of lines) { await this.tidal(line, id); track(next, line); } }
+        try { for (const line of lines) { if (!isTrackedTidal(line)) this.external = true; await this.tidal(line, id); track(next, line); } }
         catch (e) { r.slots = saved; r.tempoBpm = bpm; try { await this.restore(id); } catch { r.synchronized = false; } throw new Error("Set load failed; previous set retained. " + String(e)); }
-        Object.assign(r, next); r.synchronized = true; return { msg: "loaded set: " + c.value };
+        Object.assign(r, next); r.synchronized = !this.external; return { msg: "loaded set: " + c.value };
       }
       default: throw new Error("Unsupported command " + c.cmd);
     }

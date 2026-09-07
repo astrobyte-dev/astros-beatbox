@@ -56,6 +56,8 @@ try {
   await page.setViewportSize({width:1440,height:1000});await page.getByRole("button",{name:"Save jam",exact:true}).click();await page.getByRole("textbox",{name:"Save as",exact:true}).fill("p2-journey");await page.getByRole("dialog").getByRole("button",{name:"Save jam",exact:true}).click();await page.getByRole("dialog").waitFor({state:"detached"});
   await page.getByRole("button",{name:"My Jams",exact:true}).click();await page.getByRole("button",{name:"New empty jam",exact:true}).click();await page.getByRole("button",{name:"Start new jam",exact:true}).click();await wait(()=>app.project.document.tracks.length===0);await sync();
   await page.getByRole("button",{name:"Open jam p2-journey",exact:true}).click();await wait(()=>app.project.document.tracks.length===4);await sync();assert.deepEqual(app.project.document.assets.at(-1),replacement);
+  assert.equal(app.rig.stopped,true,"P3 reopens projects safely stopped");
+  await page.getByRole("button",{name:"Play",exact:true}).click();await wait(()=>!app.rig.paused);await sync();
   const gen=engine.generation;await page.reload();await page.getByRole("button",{name:"Pause",exact:true}).waitFor();assert.equal(engine.generation,gen);assert.equal(app.rig.paused,false);
   await page.getByRole("button",{name:"Record",exact:true}).click();await wait(()=>app.rig.recording);await sync();const take=app.projectState().recordingState.id;
   // Preview during a take exercises the real separation, not just a disabled UI.
