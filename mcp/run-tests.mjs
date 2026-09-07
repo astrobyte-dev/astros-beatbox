@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-const FLOOR = 380; // P0a–P4 plus three Product Finish persistence/telemetry regressions.
+const FLOOR = 383; // P5 plus native clock, SC framing and negative-control regressions.
 
 const distDir = join(dirname(fileURLToPath(import.meta.url)), "dist");
 let files = [];

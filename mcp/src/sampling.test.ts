@@ -98,7 +98,7 @@ for (const patch of [{ start: .9, end: .2 }, { pitch: 25 }, { release: -1 }, { a
 test("Compiler projects regions, reverse rate and envelope while retaining FX semantic targets", async t => {
   const { app, add, send } = fixture(t); const c = await add();
   await send("project.edit", { label: "Sample", edits: [{ type: "sample.playback", clipId: c.id, playback: { ...defaultPlayback(), start: .2, end: .7, reverse: true, pitch: 12, mode: "loop", beats: 8 } }] });
-  const p = app.project.document, code = compileClip(p, p.clips[0]); assert.match(code, /slow 2/); assert.match(code, /begin "0.2/); assert.match(code, /end "0.7/); assert.match(code, /\|\* speed -2/); assert.match(code, /abxattack/);
+  const p = app.project.document, code = compileClip(p, p.clips[0]); assert.match(code, /slow 2/); assert.match(code, /begin "0.2/); assert.match(code, /end "0.7/); assert.match(code, /\|\* speed \(-2\)/); assert.match(code, /abxattack/);
   assert.match(INSTALL_SAMPLE_ENVELOPE, /life \/ \(a \+ r\)/); assert.match(INSTALL_SAMPLE_ENVELOPE, /dirt_envelope/);
 });
 test("Slice IDs, pad references and scene copies survive reorder, remove/Undo and save", async t => {
@@ -172,7 +172,7 @@ test("FX, semantic automation/modulation, scene silence and recovery coexist wit
   const p = app.project.document, track = p.tracks[0], c = p.clips[0] as StepClip;
   const rack = ["distortion", "reverb"].map((id, i) => { const d = effects.find(d => d.id === id)!; return { id: "insert" + i, definitionId: id, version: 1, enabled: true, values: defaults(d) }; });
   assert.ok((await send("project.edit", { label: "Vocal fun", edits: [...rack.map(effect => ({ type: "fx.put", trackId: track.id, effect })), { type: "sample.playback", clipId: c.id, playback: { ...defaultPlayback(), reverse: true, pitch: -7 } }, { type: "automation.put", automation: { id: "auto", trackId: track.id, clipId: c.id, parameter: "fx.insert0.drive", enabled: true, bars: 1, values: [.1, .8] } }, { type: "modulation.put", trackId: track.id, route: { id: "mod", target: "fx.insert0.drive", source: "lfo", rate: 1, amount: .2, enabled: true } }] })).ok);
-  const shaped = app.project.document; assert.match(rackCommand(shaped), /abxFX/); assert.match(compileClip(shaped, shaped.clips[0]), /speed -/);
+  const shaped = app.project.document; assert.match(rackCommand(shaped), /abxFX/); assert.match(compileClip(shaped, shaped.clips[0]), /speed \(-/);
   await send("project.save", { value: "fun" }); await send("project.new"); await send("project.load", { value: "fun" }); assert.deepEqual(app.project.document.tracks, shaped.tracks); assert.deepEqual(app.project.document.clips, shaped.clips);
   const recovered = new Application(engine, paths); assert.deepEqual(recovered.project.document.clips, shaped.clips); assert.equal(recovered.rig.stopped, true);
 });

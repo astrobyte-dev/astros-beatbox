@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FrameReader, tidalFrame, sclangFrame, type Frame } from "./protocol.js";
+import { FrameReader, tidalFrame, sclangFrame, sclangFileFrame, type Frame } from "./protocol.js";
 import { ProcDriver } from "./proc.js";
 
 function reader(): FrameReader { return new FrameReader(tidalFrame('d1 $ s "bd"', "current")); }
@@ -40,6 +40,16 @@ test("SC source echoes cannot contain a complete acknowledgement marker", () => 
   const frame = sclangFrame('"hello".postln;', "current");
   assert.ok(!frame.script.includes("current:OK"));
   assert.ok(sclangFrame("s.sync;", "current", true).script.includes("Routine"));
+});
+
+test("SC file compilation retains framed failure/completion and escapes the source path", () => {
+  const frame = sclangFileFrame('C:/a space/quoted"name.scd', "current", true);
+  assert.ok(frame.script.includes('File.readAllString("C:/a space/quoted\\"name.scd").compile'));
+  assert.ok(frame.script.includes("Routine"));
+  assert.ok(!frame.script.includes("current:OK"));
+  const r = new FrameReader(frame);
+  r.line("stdout", "current:BEGIN"); r.line("stdout", "current:FAIL"); r.line("stdout", "current:END");
+  assert.throws(() => r.result("large-command"));
 });
 
 test("ordinary output mentioning an error is not itself a diagnostic", () => {

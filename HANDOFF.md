@@ -46,7 +46,7 @@ only server addition publishes the existing save observation plus the last
 successful filename to Studio. No new authored schema, player, native code,
 parameter range, ownership rule or major feature family was introduced.
 
-**All native gates remain open:** P2.6 Windows desktop/audio; P3 native audio/timing
+**At the original handoff, all native gates remained open:** P2.6 Windows desktop/audio; P3 native audio/timing
 and Windows; P3.5A native audio/timing/CPU and Windows; P3.5B native microphone/audio
 and Windows; P4 native audio/timing/CPU/musical quality and Windows. P5 also needs
 real Windows and native whole-product acceptance. Ubuntu remains **Level B —
@@ -55,6 +55,27 @@ pending installation state were modified. Historical P2.5 Windows acceptance doe
 not close these later revalidation gates.
 
 The historical checkpoint and native setup contracts below remain relevant.
+
+### Windows acceptance follow-up — 2026-09-07
+
+See [Windows native acceptance](docs/windows-native-acceptance.md) for the current
+machine's measured results and four targeted acceptance fixes. Portable checks,
+native lifecycle/audio and the P4/P5 native browser journeys passed with those
+acceptance fixes. **P2.6 Windows desktop/audio and shared P3–P5 Windows desktop
+subchecks now pass**, including explicit current human console-flash confirmation.
+P3 acoustic transition review and P3.5A/P4/P5 musical-quality gates remain open;
+the supplied musical results were unselected placeholders. P3.5B's usable-input
+subset also remains open because no actual input/result was supplied. See the
+report for precise evidence and limits; Linux native audio remains unvalidated.
+The acceptance commit contains the user-authorized fixes, tests and documentation
+on this branch. No PR was merged or retargeted. The report identifies
+the original handoff SHA, patch scope, evidence and remaining checkpoints.
+
+The report also records a human UX requirement for the post-acceptance KNURL
+rename/desktop-shell work: persistent Windows tray presence with health,
+Open Studio/System, Stop/Restart Audio and Quit. Preserve active music when the
+browser closes and verified runtime reuse on relaunch. This work is deferred;
+it is not part of the current acceptance implementation.
 
 ## Historical P2.5 checkpoint
 
@@ -192,10 +213,12 @@ See [TASK-2.6](tasks/TASK-2.6.md) and [Ubuntu setup](docs/p26-ubuntu-portability
 - Ubuntu status: **Level B — Runtime Safe**; native audio **NOT VALIDATED**.
 - Native setup blocker: pre-existing half-configured Ubuntu kernel package.
   No system/audio packages or global configuration were changed by this phase.
-- **WINDOWS REVALIDATION IS PENDING**: real launcher/default browser, zero console
-  shows, second-launch runtime/session stability, recording continuity/finalization,
-  Restart Audio, Stop, Quit, descendant cleanup and unrelated-process protection.
-  Do not merge P2.6 as fully cross-platform-safe before these checks pass.
+- **WINDOWS REVALIDATION PASSED in the acceptance follow-up**: real launcher/default
+  browser, zero console shows with current human confirmation, second-launch
+  runtime/session stability, recording continuity/finalization, Restart Audio,
+  Stop, Quit, descendant cleanup and unrelated-process protection. See the
+  [Windows acceptance report](docs/windows-native-acceptance.md) for tested fixes
+  and evidence. This does not validate Linux native audio or authorize any merge.
 
 Use `nvm install && nvm use`, then the normal `mcp` npm commands. Linux requires
 Python 3.9+ with pidfds for managed audio ownership. The backend does not load

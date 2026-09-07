@@ -510,6 +510,15 @@ test("P4 synth compiler carries independent macro and modulation beside automati
   assert.match(body, /pF "mcutoffamount" 0.2/);
   assert.match(body, /pF "abxcutoff" \(slow 2 "0.2 0.8"\)/);
 });
+
+test("P4 negative synth macro and modulation are valid Haskell function arguments", () => {
+  const p = macros(fixtureProject()), t = p.tracks.at(-1)!;
+  p.jam!.macros.forEach(m => m.value = -0.8);
+  t.modulation!.forEach(m => m.amount = -0.2);
+  const body = compileClip(p, steps(p, t.id));
+  assert.match(body, /pF "jcutoff" \(-0.28\)/);
+  assert.match(body, /pF "mcutoffamount" \(-0.2\)/);
+});
 test("P4 native normalized macro addition is clamped with modulation before DSP mapping", () => {
   assert.match(SOUND_LAB_SYNTHS, /Lag.kr\(\\jcutoff.kr\(0\), 0.02\)/);
   assert.match(SOUND_LAB_SYNTHS, /amount.kr\(0\), 0.02\)\)\).clip\(0, 1\)/);

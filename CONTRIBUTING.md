@@ -197,3 +197,22 @@ SC/Tidal compilation, sound quality or node lifetime. Preserve the pending gates
 and documented limitations in [the P3.5A report](docs/p35-sound-lab-core.md).
 SC binary operators share precedence: parenthesize modulation and dry/wet products.
 String membership uses `includesEqual`, not identity-based `includes`.
+
+## Native compiler regressions
+
+After building, run `node tidal-native-selftest.mjs` and
+`node sclang-native-selftest.mjs` from `mcp`, sequentially with the audio rig idle.
+These opt-in checks require the installed interpreters; they are separate from
+the portable test suite and do not establish audible musical quality.
+
+The Tidal check executes the actual boot helper, managed-code preparation,
+negative sample/modulation/macro arguments, cycle/immediate installation and
+compiler-error recovery. Cabal environments may hide transitive packages, so
+BootTidal exposes its imports before creating the stream. Generated multiline
+actions use explicit Haskell layout, and negative function arguments use parentheses.
+
+The SC check executes 9 KB and 70 KB source, asynchronous completion, a compiler
+failure and a subsequent command, then checks temporary-file cleanup. Large inline
+`.compile` string literals can be truncated by SC's lexer. The driver compiles
+oversized commands from a private temporary file with the same framed acknowledgements
+and SystemClock barriers, retaining the file until the queued operation completes.

@@ -1,5 +1,8 @@
 import { ProcDriver } from "./proc.js";
-import { sclangFrame } from "./protocol.js";
+import { sclangFrame, sclangFileFrame } from "./protocol.js";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { SCLANG, SCSYNTH, AUDIO_CAPABILITIES, DEFAULT_AUDIO_DEVICE, SUPERDIRT_STARTUP, SUPERDIRT_READY, SC_WELCOME, AUDIO_DEVICE_FILE, DIRT_SAMPLES_DIR } from "./config.js";
 import { scStr } from "./track.js";
 
@@ -16,13 +19,32 @@ export class Sclang extends ProcDriver {
 
   /** Evaluate a chunk of SuperCollider code in the running interpreter. */
   eval(code: string, operationId?: string, timeoutMs?: number) {
-    return this.execute((token) => sclangFrame(code, token), operationId, timeoutMs);
+    return this.evaluate(code, false, operationId, timeoutMs);
   }
 
   // Internal asynchronous work acknowledges from inside the routine, after its
   // waits/syncs, rather than acknowledging only that it has been scheduled.
   evalRoutine(code: string, operationId?: string, timeoutMs = 15000) {
-    return this.execute((token) => sclangFrame(code, token, true), operationId, timeoutMs);
+    return this.evaluate(code, true, operationId, timeoutMs);
+  }
+
+  private async evaluate(code: string, routine: boolean, operationId?: string, timeoutMs?: number) {
+    let directory: string | undefined;
+    try {
+      return await this.execute(token => {
+        const frame = sclangFrame(code, token, routine);
+        // SC's lexer truncates large string literals in inline .compile frames.
+        // Compile the same source from a private file, retaining all ACK/error and
+        // SystemClock barriers. Keep the file until the queued operation finishes.
+        if (Buffer.byteLength(frame.script, "utf8") <= 7000) return frame;
+        directory = mkdtempSync(path.join(tmpdir(), "abx-sclang-"));
+        const file = path.join(directory, "command.scd");
+        writeFileSync(file, code, "utf8");
+        return sclangFileFrame(file, token, routine);
+      }, operationId, timeoutMs);
+    } finally {
+      if (directory) rmSync(directory, { recursive: true, force: true });
+    }
   }
 
   /** Boot scsynth + SuperDirt and wait until it's listening on :57120. */

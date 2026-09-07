@@ -178,6 +178,9 @@ try {
   await sync();
   assert.deepEqual(app.project.document.clips, saved.clips);
   assert.deepEqual(app.project.document.tracks, saved.tracks);
+  assert.equal(app.rig.stopped, true, "Reopened projects must remain stopped");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await wait(() => !app.rig.stopped);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await wait(() => app.rig.paused);
   await sync();
