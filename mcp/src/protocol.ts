@@ -62,9 +62,17 @@ export function tidalFrame(code: string, token: string): Frame {
 }
 
 export function sclangFrame(code: string, token: string, routine = false): Frame {
+  return sclangCompileFrame(sc(code), token, routine);
+}
+
+export function sclangFileFrame(file: string, token: string, routine = false): Frame {
+  return sclangCompileFrame(`File.readAllString(${sc(file.replace(/\\/g, "/"))})`, token, routine);
+}
+
+function sclangCompileFrame(source: string, token: string, routine: boolean): Frame {
   const work = `try { f.value; ${scMark(token, "OK")} } { |e| ${scMark(token, "FAIL")} e.reportError; }; ${scMark(token, "END")}`;
   return {
     token, streams: ["stdout"], acknowledgement: "action",
-    script: `{ var f; ${scMark(token, "BEGIN")} f = ${sc(code)}.compile; if(f.isNil) { ${scMark(token, "FAIL")} ${scMark(token, "END")} } { ${routine ? `Routine({ ${work} }).play(SystemClock);` : work} }; }.value;\n\x0c\n`,
+    script: `{ var f; ${scMark(token, "BEGIN")} f = ${source}.compile; if(f.isNil) { ${scMark(token, "FAIL")} ${scMark(token, "END")} } { ${routine ? `Routine({ ${work} }).play(SystemClock);` : work} }; }.value;\n\x0c\n`,
   };
 }

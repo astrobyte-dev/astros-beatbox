@@ -1,3 +1,4 @@
+import { Help, readTips, rememberTips, focusRegion } from "./Help";
 import { Jam } from "./Jam";
 import { UserSounds, CapturePanel } from "./Sampling";
 import { InstrumentBrowser, SoundLab } from "./SoundLab";
@@ -38,7 +39,11 @@ export function App() {
   const [performing, setPerforming] = useState(false);
   const [files, setFiles] = useState<string[]>([]),
     [fileError, setFileError] = useState("");
-  const [dialog, setDialog] = useState<"save" | "new" | null>(null);
+  const [dialog, setDialog] = useState<"save" | "new" | "open" | null>(null);
+  const [openFile, setOpenFile] = useState("");
+  const [help, setHelp] = useState(false);
+  const [tips, setTips] = useState(readTips);
+  const showTips = (show: boolean) => { setTips(show); rememberTips(show); };
   const workspace = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     let cancelled = false;
@@ -64,8 +69,8 @@ export function App() {
     }
   }, []);
   useEffect(() => {
-    void loadFiles();
-  }, [library, loadFiles]);
+    if (library === "My Jams" || dialog === "save") void loadFiles();
+  }, [library, dialog, loadFiles]);
   const p = state?.project;
   const track =
     p?.tracks.find(
@@ -100,22 +105,23 @@ export function App() {
   const disabled = !connection.connected || !!connection.busy;
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
-      if (
-        !(e.ctrlKey || e.metaKey) ||
-        e.altKey ||
-        e.key.toLowerCase() !== "z" ||
-        (e.target instanceof HTMLElement &&
-          e.target.closest("input,textarea,select,[contenteditable],dialog"))
-      )
-        return;
+      if (e.repeat || e.altKey || (e.target instanceof HTMLElement &&
+        e.target.closest("input,textarea,select,[contenteditable],[role=slider],dialog"))) return;
+      const modified = e.ctrlKey || e.metaKey;
+      if (e.key === "?" && !modified) { e.preventDefault(); setHelp(true); return; }
+      if (!modified) return;
+      const key = e.key.toLowerCase();
+      if (!["z", "s", " "].includes(key)) return;
       e.preventDefault();
-      const s = client.getSnapshot();
-      if (!s || client.getStatus().busy) return;
-      if (e.shiftKey ? s.history.redo : s.history.undo)
-        void client.command(
-          { cmd: e.shiftKey ? "project.redo" : "project.undo" },
-          e.shiftKey ? "Redo" : "Undo",
-        );
+      const s = client.getSnapshot(), status = client.getStatus();
+      if (!s || status.busy || !status.connected) return;
+      if (key === "s") { setDialog("save"); return; }
+      if (key === " " && s.project.tracks.some(t => t.activeClipId)) {
+        const playing = s.status === "ready" && !s.stopped && !s.paused && s.synchronized && s.projectRuntime.appliedRevision !== null;
+        void client.command({cmd: playing ? "pause" : "resume"}, playing ? "Pause" : "Play");
+      }
+      if (key === "z" && (e.shiftKey ? s.history.redo : s.history.undo))
+        void client.command({ cmd: e.shiftKey ? "project.redo" : "project.undo" }, e.shiftKey ? "Redo" : "Undo");
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
@@ -129,7 +135,7 @@ export function App() {
         <h1>Make room for a little rhythm.</h1>
         <p role="status">{connection.error || "Opening your studio…"}</p>
         <button onClick={() => void client.refresh()}>Reconnect</button>
-        <a href="/">Classic dashboard</a>
+        <a href="/system">Check audio & connection in System</a>
       </main>
     );
   const playing =
@@ -167,7 +173,7 @@ export function App() {
             : state.status === "booting"
               ? "Preparing sound…"
               : "Paused";
-  const start = async () => {
+  const start = async (play = false) => {
     try {
       const edits = pocketGroove(p),
         base = client.base();
@@ -180,7 +186,10 @@ export function App() {
         !(await client.command({ cmd: "pause" }, "Prepare starter", base))
       )
         return;
-      await client.edit(edits, "Start Pocket groove", base);
+      if (await client.edit(edits, "Start Pocket groove", base)) {
+        if (play) await client.command({ cmd: "resume" }, "Play");
+        focusRegion(".tracks");
+      }
     } catch (e) {
       client.report(String(e));
     }
@@ -216,6 +225,9 @@ export function App() {
               )
             }
           />
+          <span className="save-state" role="status" title={state.persistence?.name ? `Saved file: ${state.persistence.name}` : "Save a named jam to keep it"}>
+            {connection.busy === "Save jam" ? "Saving…" : state.persistence?.state === "saved" ? "✓ Saved on this computer" : state.persistence?.name ? "● Unsaved changes" : "○ Not saved yet"}
+          </span>
         </div>
         <div className="transport">
           <button
@@ -245,7 +257,7 @@ export function App() {
             onClick={async () => {
               const finishing = !!state.recordingState && state.recording;
               const ok = await client.command(finishing ? { cmd: "record.stop", value: state.recordingState!.id } : { cmd: "record.start" }, "Record");
-              if (ok && finishing) setLibrary("Recordings");
+              if (ok && finishing) { setLibrary("Recordings"); setJamming(false); setPerforming(false); setMixer(false); focusRegion(".recording-library"); }
             }}
           >
             <i />
@@ -281,10 +293,11 @@ export function App() {
           Save jam
         </button>
         <button className="jam-mode-button" aria-pressed={jamming} onClick={() => setJamming(!jamming)}>{jamming ? "Exit Jam" : "Jam"} ✳</button>
+        <button className="help-button" aria-label="Help and keyboard shortcuts" title="Help · ?" onClick={() => setHelp(true)}>?</button>
         <a href="/system" className="studio-system-link">System</a>
       </header>
       <div className={`studio-body ${jamming ? "is-jamming" : ""}`}>
-        <aside hidden={jamming} className="library" aria-label="Library">
+        <aside hidden={jamming} tabIndex={-1} className="library" aria-label="Library">
           <div className="library-top">
             <span className="eyebrow">YOUR SOUND STARTS HERE</span>
             <h2>
@@ -293,25 +306,14 @@ export function App() {
           </div>
           <nav aria-label="Library sections">
             {[
-              ["Grooves", "groove"],
-              ["Sounds", "sound"],
-              ["My Sounds", "sound"],
-              ["Capture", "sound"],
-              ["Synths", "sound"],
-              ["My Jams", "folder"],
-              ["Recordings", "sound"],
-            ].map(([name, icon]) => (
-              <button
-                key={name}
-                className={library === name ? "active" : ""}
-                aria-pressed={library === name}
-                onClick={() => setLibrary(name)}
-              >
-                <Icon name={icon} />
-                {name}
-                {library === name && <span className="nav-dot" />}
+              { label: "MAKE SOUND", items: [["Grooves", "groove"], ["Sounds", "sound"], ["Synths", "sound"]] },
+              { label: "YOUR SOUNDS", items: [["My Sounds", "sound"], ["Capture", "sound"]] },
+              { label: "KEEP & RETURN", items: [["My Jams", "folder"], ["Recordings", "sound"]] },
+            ].map(group => <div className="library-group" key={group.label}><span className="eyebrow">{group.label}</span><div>{group.items.map(([name, icon]) => (
+              <button key={name} className={library === name ? "active" : ""} aria-pressed={library === name} onClick={() => setLibrary(name)}>
+                <Icon name={icon} />{name}{library === name && <span className="nav-dot" />}
               </button>
-            ))}
+            ))}</div></div>)}
           </nav>
           {library === "Grooves" ? (
             <div className="library-content">
@@ -342,7 +344,7 @@ export function App() {
               <button
                 className="starter-button"
                 disabled={disabled || hasMusic}
-                onClick={start}
+                onClick={() => void start()}
               >
                 {hasMusic ? "Start in a new jam" : "Use this groove"}
                 <Icon name="arrow" />
@@ -362,9 +364,9 @@ export function App() {
           ) : library === "Sounds" ? (
             <SoundLibrary track={track} />
           ) : library === "My Sounds" ? (
-            <UserSounds track={track} onSelect={select} />
+            <UserSounds track={track} onSelect={select} onCapture={() => setLibrary("Capture")} />
           ) : library === "Capture" ? (
-            <CapturePanel />
+            <CapturePanel onSounds={() => setLibrary("My Sounds")} />
           ) : library === "Recordings" ? (
             <Recordings />
           ) : (
@@ -378,12 +380,10 @@ export function App() {
                       <button
                         disabled={disabled}
                         aria-label={`Open jam ${f}`}
-                        onClick={() =>
-                          void client.command(
-                            { cmd: "project.load", value: f },
-                            "Open jam",
-                          )
-                        }
+                        onClick={() => {
+                          if ((hasMusic || state.history.undo > 0) && state.persistence?.state !== "saved") { setOpenFile(f); setDialog("open"); }
+                          else void client.command({ cmd: "project.load", value: f }, "Open jam");
+                        }}
                       >
                         <Icon name="folder" />
                         <span>{f}</span>
@@ -417,15 +417,13 @@ export function App() {
               A little curiosity.
               <br />A lot of possibility.
             </p>
-            <a href="/" target="_blank" rel="noreferrer">
-              Classic dashboard ↗
-            </a>
+            <button className="text-button" onClick={() => setHelp(true)}>A little guidance · ?</button>
           </div>
         </aside>
         <main id="workspace" className="workspace" tabIndex={-1}>
           {!jamming && <><div className="workspace-intro">
             <div>
-              <span className="eyebrow">THE STUDIO / 01</span>
+              <span className="eyebrow">YOUR STUDIO</span>
               <h1 ref={workspace} tabIndex={-1}>
                 Play with sound<span>.</span>
               </h1>
@@ -453,7 +451,24 @@ export function App() {
               {statusText}
             </span>
           </div>
+          {p.tracks.length > 0 && <nav className="creative-links" aria-label="Creative tools">
+            <button disabled={!track || track.channel === null} onClick={() => { setPerforming(false); setMixer(false); focusRegion(".sound-lab"); }}>Sound Lab · {track?.name}</button>
+            <button onClick={() => focusRegion(".composition")}>Scenes & arrangement</button>
+            <button onClick={() => { setPerforming(false); setMixer(false); focusRegion(".inspector"); }}>Rhythm details</button>
+          </nav>}
           </>}
+          <div className="feedback" aria-live="polite" aria-atomic="true">
+            {connection.busy ? (
+              `${connection.busy}… waiting for confirmation`
+            ) : connection.error ? (
+              <span role="alert">
+                {connection.error}{" "}
+                <button onClick={client.dismiss}>Dismiss</button>
+              </span>
+            ) : (
+              connection.message
+            )}
+          </div>
           {state.projectRuntime.song && (
             <div className="notice">
               An arrangement is playing. Switch to these instruments to hear the
@@ -483,21 +498,22 @@ export function App() {
           )}
           {state.recordingUnconfirmed && (
             <p className="notice" role="alert">
-              Recording could not be finalized. Open the classic dashboard to
-              inspect the engine.
+              Recording could not be finalized. <a href="/system">Open System to inspect audio and recent activity.</a>
             </p>
           )}
           {engineIssue && (
             <div className="notice" role="alert">
-              Sound could not be confirmed: {engineIssue}{" "}
-              <a href="/" target="_blank" rel="noreferrer">
-                Open diagnostics ↗
-              </a>
+              <strong>Playback needs attention.</strong> Your jam is still available to edit and save. <a href="/system">Check audio in System →</a>
+              <details><summary>Audio details</summary>{engineIssue}</details>
             </div>
           )}
           {state.projectRuntime.externallyModified && <div className="notice" role="alert">Externally modified · this project does not fully describe current playback. Authored edits are kept without replacing external music. <button disabled={disabled} onClick={() => void client.command({ cmd: "performance.return" }, "Return to managed project")}>Return to managed project</button></div>}
-          {jamming ? <Jam key={state.sessionId + p.id} state={state} disabled={disabled} playing={playing} editTrack={id => { select(id); setJamming(false); setPerforming(false); setMixer(false); }} /> : <>
-          {p.tracks.length > 0 && <Composition state={state} disabled={disabled} performing={performing} onPerform={() => { setPerforming(!performing); setMixer(!performing); }} />}
+          {jamming ? <Jam suggestions={tips} onDismissTips={() => showTips(false)} key={state.sessionId + p.id} state={state} disabled={disabled} playing={playing} editTrack={id => { select(id); setJamming(false); setPerforming(false); setMixer(false); }} /> : <>
+          {performing && p.tracks.length > 0 && <Composition state={state} disabled={disabled} performing onPerform={() => { setPerforming(false); setMixer(false); focusRegion(".tracks"); }} />}
+          {tips && p.tracks.length > 0 && !performing && <div className="context-tip">
+            <p>{!playing ? "Press Play to hear your groove. Then tap a pad to make it yours." : track?.source?.type === "synth" ? "Open Sound Lab and twist Cutoff. Release to hear the change; Undo brings it back." : "Tap a pad to change the rhythm. Try another sound, or enter Jam to make a variation."}</p>
+            <button aria-label="Dismiss contextual tips" onClick={() => showTips(false)}>Got it</button>
+          </div>}
           {p.tracks.length ? (
             <>
               <div className="rhythm-guide">
@@ -512,7 +528,7 @@ export function App() {
               </div>
               <ClockStrip playing={playing} />
               {!mixer ? (
-                <div className="tracks">
+                <div className="tracks" tabIndex={-1} aria-label="Instrument rhythms">
                   {p.tracks.map((t) => {
                     const c = p.clips.find((c) => c.id === t.activeClipId),
                       a =
@@ -620,6 +636,7 @@ export function App() {
                 </div>
               )}
               {!performing && track && track.channel !== null && <SoundLab key={p.id + track.id} project={p} track={track} disabled={disabled} />}
+              {!performing && <Composition state={state} disabled={disabled} performing={false} onPerform={() => { setPerforming(true); setMixer(true); focusRegion(".composition"); }} />}
               {!performing && <button disabled={disabled} onClick={() => { try { void client.edit(addCodeTrack(p, state.workspace.selectedSceneId ?? p.sceneOrder[0]), "Add managed code instrument"); } catch (e) { client.report(String(e)); } }}>+ Code instrument</button>}
               <div className="workspace-tip">
                 <span>↳</span>
@@ -653,28 +670,23 @@ export function App() {
                 <br />
                 to put your own spin on it.
               </p>
-              <button className="primary" disabled={disabled} onClick={start}>
-                Start Pocket groove
-                <Icon name="arrow" />
+              <button className="primary" disabled={disabled} onClick={() => void start(true)}>
+                Start Playing <Icon name="play" />
               </button>
-              <span>Nothing plays until you press Play.</span>
+              <span>Pocket groove · four instruments · 108 BPM</span>
+              <div className="arrival-choices">
+                <button disabled={disabled} onClick={() => { setLibrary("My Jams"); focusRegion(".library"); }}>Open Existing</button>
+                <button onClick={() => setJamming(true)}>Explore Jam starts ✳</button>
+              </div>
+              <button className="text-button" disabled={disabled} onClick={() => void start()}>Start Pocket groove</button>
+              <span>Prefer a quiet start? This prepares the pads without playing.</span>
             </div>
           )}
           </>}
-          <div className="feedback" aria-live="polite" aria-atomic="true">
-            {connection.busy ? (
-              `${connection.busy}… waiting for confirmation`
-            ) : connection.error ? (
-              <span role="alert">
-                {connection.error}{" "}
-                <button onClick={client.dismiss}>Dismiss</button>
-              </span>
-            ) : (
-              connection.message
-            )}
-          </div>
+
         </main>
         <aside
+          tabIndex={-1}
           hidden={performing || jamming}
           className={`inspector ${track ? accent(track.slot) : ""}`}
           aria-label="Instrument inspector"
@@ -685,6 +697,7 @@ export function App() {
               project={p}
               track={track}
               step={selectedStep}
+              onFindSound={(owned) => { setLibrary(owned ? "My Sounds" : "Sounds"); focusRegion(".library"); }}
               disabled={disabled}
             />
           ) : (
@@ -710,11 +723,14 @@ export function App() {
           {p.tracks.length} instruments
         </span>
       </footer>
+      {help && <Help onClose={() => setHelp(false)} onTips={() => showTips(true)} />}
       {dialog && (
         <ProjectDialog
           kind={dialog}
           files={files}
           projectName={p.name}
+          savedName={state.persistence?.name ?? null}
+          openFile={openFile}
           onClose={() => setDialog(null)}
           onSaved={() => {
             void loadFiles();
@@ -789,11 +805,13 @@ function Inspector({
   track,
   step,
   disabled,
+  onFindSound,
 }: {
   project: ProjectDocument;
   track: Track;
   step: number;
   disabled: boolean;
+  onFindSound: (owned: boolean) => void;
 }) {
   const state = useProject()!;
   const clip = p.clips.find((c) => c.id === track.activeClipId),
@@ -837,6 +855,7 @@ function Inspector({
       {assetStatus?.status === "missing" && (
         <p className="notice" role="alert">
           This sound is missing. Its rhythm is kept, but playback is silent.
+          <button onClick={() => onFindSound(!!sound?.audio)}>{sound?.audio ? "Relink in My Sounds" : "Choose another sound"}</button>
         </p>
       )}
       {visual ? (
@@ -963,22 +982,26 @@ function ProjectDialog({
   kind,
   files,
   projectName,
+  savedName,
+  openFile,
   onClose,
   onSaved,
 }: {
-  kind: "save" | "new";
+  kind: "save" | "new" | "open";
   files: string[];
   projectName: string;
+  savedName: string | null;
+  openFile: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     base = useRef(client.base());
   const [name, setName] = useState(
-    projectName
+    savedName ?? (projectName
       .toLowerCase()
       .replace(/[^a-z0-9_-]+/g, "-")
-      .slice(0, 80) || "my-jam",
+      .slice(0, 80) || "my-jam"),
   );
   const [working, setWorking] = useState(false),
     [error, setError] = useState("");
@@ -994,12 +1017,13 @@ function ProjectDialog({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setWorking(true);
+    setError("");
     const ok = await client.command(
       {
-        cmd: kind === "save" ? "project.save" : "project.new",
-        ...(kind === "save" ? { value: name } : {}),
+        cmd: kind === "save" ? "project.save" : kind === "open" ? "project.load" : "project.new",
+        ...(kind === "save" ? { value: name } : kind === "open" ? { value: openFile } : {}),
       },
-      kind === "save" ? "Save jam" : "New jam",
+      kind === "save" ? "Save jam" : kind === "open" ? "Open jam" : "New jam",
       base.current,
     );
     setWorking(false);
@@ -1027,12 +1051,12 @@ function ProjectDialog({
           {kind === "save" ? "KEEP WHAT YOU LIKE" : "A FRESH START"}
         </span>
         <h2 id="dialog-title">
-          {kind === "save" ? "Give this groove a home." : "Start an empty jam?"}
+          {kind === "save" ? "Give this groove a home." : kind === "open" ? `Open “${openFile}”?` : "Start an empty jam?"}
         </h2>
         <p>
           {kind === "save"
             ? "Your instruments, rhythms, effects and mix are saved together on this computer."
-            : "Save your current jam first if you want to return to it. Starting a new jam resets undo history."}
+            : "Cancel and Save jam to keep your current work. Continuing replaces the current jam and clears Undo and session ideas."}
         </p>
         {kind === "save" && (
           <label>
@@ -1044,7 +1068,7 @@ function ProjectDialog({
               pattern="[a-zA-Z0-9_\-]{1,80}"
               maxLength={80}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setError(""); }}
               disabled={working}
             />
             <small>Letters, numbers, hyphens and underscores.</small>
@@ -1058,9 +1082,11 @@ function ProjectDialog({
           <button type="button" disabled={working} onClick={onClose}>
             Cancel
           </button>
-          <button className="primary" disabled={working || !!error}>
+          <button className="primary" disabled={working || (!!error && kind !== "save")}>
             {working
-              ? "Saving…"
+              ? (kind === "save" ? "Saving…" : "Opening…")
+              : error && kind === "save" ? "Try saving again"
+              : kind === "open" ? "Open without saving"
               : kind === "new"
                 ? "Start new jam"
                 : files.includes(name)

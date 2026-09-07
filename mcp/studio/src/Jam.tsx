@@ -10,11 +10,15 @@ export function Jam({
   disabled,
   playing,
   editTrack,
+  suggestions,
+  onDismissTips,
 }: {
   state: StudioState;
   disabled: boolean;
   playing: boolean;
   editTrack: (id: string) => void;
+  suggestions: boolean;
+  onDismissTips: () => void;
 }) {
   const p = state.project,
     caps = state.jam?.capabilities ?? jamCapabilities(p);
@@ -37,7 +41,6 @@ export function Jam({
       return [];
     }
   });
-  const [suggestions, setSuggestions] = useState(true);
   const blocked =
     disabled ||
     !!state.projectRuntime.externallyModified ||
@@ -202,6 +205,28 @@ export function Jam({
           <ClockStrip playing={playing} />
           <div className="jam-columns">
             <div className="jam-main">
+              {state.jam?.summary && (
+                <div className="jam-summary" role="status">
+                  <strong>Changed</strong>{" "}
+                  {state.jam.summary.changed.join(" · ")}
+                  <br />
+                  <strong>Kept</strong>{" "}
+                  {state.jam.summary.kept.join(" · ") ||
+                    "Everything outside your selected scope"}
+                  <details>
+                    <summary>How this happened</summary>
+                    <p>
+                      {state.jam.summary.operation} ·{" "}
+                      {state.jam.summary.intensity ?? "Semantic recipe"} ·
+                      source revision {state.jam.summary.sourceRevision} ·
+                      algorithm {state.jam.summary.algorithm}
+                      {state.jam.summary.seed !== undefined
+                        ? ` · seed ${state.jam.summary.seed}`
+                        : ""}
+                    </p>
+                  </details>
+                </div>
+              )}
               <div className="jam-action-deck">
                 <div className="jam-scope">
                   <label>
@@ -275,7 +300,7 @@ export function Jam({
               <div className="jam-section-heading">
                 <h2>Keep a little. Change a little.</h2>
                 <span>
-                  Kept parts hold their sound, including current macro offsets.
+                  Kept parts hold their sound while you explore. Open a card to protect just its rhythm, sound, FX or motion.
                 </span>
               </div>
               <div className="jam-tracks">
@@ -401,34 +426,13 @@ export function Jam({
                     </button>
                   ))}
               </div>
-              {state.jam?.summary && (
-                <div className="jam-summary" role="status">
-                  <strong>Changed</strong>{" "}
-                  {state.jam.summary.changed.join(" · ")}
-                  <br />
-                  <strong>Kept</strong>{" "}
-                  {state.jam.summary.kept.join(" · ") ||
-                    "Everything outside your selected scope"}
-                  <details>
-                    <summary>How this happened</summary>
-                    <p>
-                      {state.jam.summary.operation} ·{" "}
-                      {state.jam.summary.intensity ?? "Semantic recipe"} ·
-                      source revision {state.jam.summary.sourceRevision} ·
-                      algorithm {state.jam.summary.algorithm}
-                      {state.jam.summary.seed !== undefined
-                        ? ` · seed ${state.jam.summary.seed}`
-                        : ""}
-                    </p>
-                  </details>
-                </div>
-              )}
+
             </div>
             <aside className="jam-side" aria-label="Jam bench and ideas">
               <section className="jam-macros">
                 <div className="jam-section-heading">
                   <h2>Turn the feeling.</h2>
-                  <span>Offsets keep your original sound underneath.</span>
+                  <span>One gesture, a different feeling. Your original settings stay underneath.</span>
                 </div>
                 {!p.jam?.macros.length && (
                   <p>
@@ -544,7 +548,7 @@ export function Jam({
                 </div>
                 <small>
                   Release a gesture to hear it. Unlock a kept control to release
-                  its held offset. FX ease into place; synth changes arrive on
+                  the sound it is holding. FX ease into place; synth changes arrive on
                   new notes.
                 </small>
                 <details className="jam-custom">
@@ -688,8 +692,7 @@ export function Jam({
                   </button>
                 </div>
                 <small>
-                  Session trail is bounded. Save jam to keep your current sound
-                  on disk. Returning restores that idea’s locks too.
+                  Recent ideas stay in this session. Save jam keeps the current sound on this computer. Returning to an idea restores its locks too.
                 </small>
                 <div className="jam-promote">
                   <label>
@@ -717,8 +720,7 @@ export function Jam({
                     Save as Scene ↗
                   </button>
                   <small>
-                    Independent clips & clip motion. Instruments, FX and macros
-                    are shared between scenes.
+                    Keeps these rhythms as a scene. Sounds, FX and macros are shared between scenes; Save jam keeps the complete sound.
                   </small>
                 </div>
               </section>
@@ -821,7 +823,7 @@ export function Jam({
               </span>
               <button
                 aria-label="Dismiss Jam suggestion"
-                onClick={() => setSuggestions(false)}
+                onClick={onDismissTips}
               >
                 Dismiss
               </button>

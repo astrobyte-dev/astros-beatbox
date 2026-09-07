@@ -70,7 +70,7 @@ export function SoundLab({
   disabled: boolean;
 }) {
   const [tab, setTab] = useState(
-      track.source?.type === "synth" ? "Instrument" : "FX",
+      track.source?.type === "synth" ? "Instrument" : p.clips.find(c => c.id === track.activeClipId)?.kind === "steps" ? "Sample" : "FX",
     ),
     [advanced, setAdvanced] = useState(false),
     [patchName, setPatchName] = useState("My patch"),
@@ -272,11 +272,12 @@ export function SoundLab({
     <section
       className={`sound-lab ${accent(track.slot)}`}
       aria-label="Sound Lab"
+      tabIndex={-1}
     >
       <header className="lab-heading">
         <div>
           <span className="eyebrow">
-            SOUND LAB / {String(track.slot).padStart(2, "0")}
+            SOUND LAB · SELECTED INSTRUMENT
           </span>
           <h2>
             {track.name}
@@ -286,10 +287,10 @@ export function SoundLab({
             {d?.description ??
               (source
                 ? "Unavailable instrument version. Your sound is retained; playback is silent."
-                : "Shape this track with a serial effects rack.")}
+                : clip?.kind === "steps" ? "Shape the sample, add effects, or give it movement. Balance its level in Mixer." : "Shape this code instrument with effects. Balance its level in Mixer.")}
           </p>
         </div>
-        <span className="lab-source">{source ? "SYNTH" : "SAMPLE / CODE"}</span>
+        <span className="lab-source">{source ? "SYNTH" : clip?.kind === "steps" ? "SAMPLE" : "CODE"}</span>
       </header>
       <nav className="lab-tabs" aria-label="Sound Lab sections">
         {["Notes", "Instrument", ...(!source && clip?.kind === "steps" ? ["Sample"] : []), "FX", "Motion"].map((name) => (
@@ -307,6 +308,7 @@ export function SoundLab({
       {tab === "Sample" && clip?.kind === "steps" && !source && <SampleEditor key={clip.id} project={p} clip={clip} disabled={disabled} />}
       {tab === "Instrument" && (
         <div className="lab-instrument">
+          {!source && clip?.kind === "steps" && <p>Choose a synth to replace this sample source. Your rhythm stays; Undo restores the sample.</p>}
           <label>
             Instrument
             <select
@@ -463,6 +465,7 @@ export function SoundLab({
             Source <span>→</span> Insert FX <span>→</span> Channel{" "}
             <span>→</span> Master
           </div>
+          {!rack.length && <p className="lab-empty">Give this sound a little character. Choose an effect below; Undo removes it in one step.</p>}
           {rack.map((fx, i) => {
             const def = definition("effect", fx.definitionId, fx.version);
             return (

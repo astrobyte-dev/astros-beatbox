@@ -6,6 +6,9 @@ import { modulationControls } from "./sound-lab-engine.js";
 import { type ProjectDocument, type Clip, type Track, type Automation, ranges, type Parameter } from "./project.js";
 
 const number = (v: number) => String(Number(v.toFixed(6)));
+// A negative function argument needs parentheses in Haskell; otherwise '-' is
+// parsed as subtraction from the partially applied control function.
+const argument = (v: number) => v < 0 ? `(${number(v)})` : number(v);
 function curve(a: Automation): string {
   const [lo, hi] = a.parameter.startsWith("synth.") ? [0, 1] : ranges[a.parameter as Parameter];
   const values = '"' + a.values.map(v => number(lo + v * (hi - lo))).join(" ") + '"';
@@ -31,12 +34,12 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
     body += ' # pF "abxprev" "' + previous.map(number).join(" ") + '"';
     if (["dirtymono", "sub808"].includes(synth.id)) body += ' # cut ' + (100 + track.slot);
     for (const param of synth.parameters) if (!automation.some(a => a.parameter === "synth." + param.id)) body += ' # pF "abx' + param.id + '" ' + number(source.values[param.id]);
-    for (const param of synth.parameters) { const offset = macroOffset(p, track.id, "synth." + param.id); if (offset) body += ' # pF "j' + param.id + '" ' + number(offset); }
-    for (const [key, value] of Object.entries(modulationControls(track.modulation ?? [], "synth."))) body += ' # pF "' + key + '" ' + number(value);
+    for (const param of synth.parameters) { const offset = macroOffset(p, track.id, "synth." + param.id); if (offset) body += ' # pF "j' + param.id + '" ' + argument(offset); }
+    for (const [key, value] of Object.entries(modulationControls(track.modulation ?? [], "synth."))) body += ' # pF "' + key + '" ' + argument(value);
   }
   for (const key of Object.keys(c.parameters).sort() as (keyof typeof c.parameters)[]) {
     if (automation.some(a => a.parameter === key)) continue;
-    body += (key === "gain" ? " |* gain " : ` # ${key} `) + number(c.parameters[key]!);
+    body += (key === "gain" ? " |* gain " : ` # ${key} `) + argument(c.parameters[key]!);
   }
   for (const a of automation.filter(a => a.clipId !== null || !automation.some(b => b.clipId === c.id && b.parameter === a.parameter)).sort((a, b) => a.parameter.localeCompare(b.parameter))) {
     body += (a.parameter === "gain" ? " |* gain " : a.parameter.startsWith("synth.") ? ` # pF "abx${a.parameter.slice(6)}" ` : ` # ${a.parameter} `) + curve(a);
@@ -45,7 +48,7 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
     const v = c.playback ?? defaultPlayback();
     const regions = c.steps.map((_, i) => c.slices?.find(s => s.id === c.sliceSteps?.[i]) ?? v);
     body += ' # begin "' + regions.map(s => number(s.start)).join(" ") + '" # end "' + regions.map(s => number(s.end)).join(" ") + '"';
-    body += ' |* speed ' + number((v.reverse ? -1 : 1) * 2 ** (v.pitch / 12));
+    body += ' |* speed ' + argument((v.reverse ? -1 : 1) * 2 ** (v.pitch / 12));
     body += ' # pF "abxattack" ' + number(v.attack) + ' # pF "abxrelease" ' + number(v.release);
     if (v.mode === "loop") body = `slow ${number(v.beats / p.tempo.beatsPerCycle)} $ ${body}`;
   }

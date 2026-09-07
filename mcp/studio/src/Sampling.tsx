@@ -7,17 +7,28 @@ import { client, useProject, useConnection } from "./session";
 import { Range } from "./controls";
 
 export function Waveform({ url, start = 0, end = 1 }: { url: string; start?: number; end?: number }) {
-  const [peaks, setPeaks] = useState<number[]>([]);
-  useEffect(() => { const controller = new AbortController(); setPeaks([]); void fetch(url, { signal: controller.signal }).then(async r => { if (r.ok) setPeaks(await r.json()); }).catch(() => {}); return () => controller.abort(); }, [url]);
-  return <svg className="sample-wave" viewBox="0 0 512 100" preserveAspectRatio="none" role="img" aria-label={peaks.length ? "Audio waveform with selected region" : "Waveform unavailable"}>
-    <rect x={start * 512} y="0" width={(end - start) * 512} height="100" fill="currentColor" opacity=".1" />
-    <path d={peaks.map((p, i) => `M${i},${50 - p * 47}V${50 + p * 47}`).join(" ")} stroke="currentColor" strokeWidth="1" />
-    <path d={`M${start * 512},0V100 M${end * 512},0V100`} stroke="currentColor" strokeWidth="2" />
-  </svg>;
+  const [peaks, setPeaks] = useState<number[]>([]), [status, setStatus] = useState("Preparing waveform…"), [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController(); setPeaks([]); setStatus("Preparing waveform…");
+    void fetch(url, { signal: controller.signal }).then(async r => {
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      if (!controller.signal.aborted) { setPeaks(data); setStatus(""); }
+    }).catch(() => { if (!controller.signal.aborted) setStatus("Waveform unavailable. Your sound and trim controls remain available."); });
+    return () => controller.abort();
+  }, [url, attempt]);
+  return <div className="waveform-view">
+    {status && <p className="waveform-status" role="status">{status}{status.startsWith("Waveform unavailable") && <button className="text-button" onClick={() => setAttempt(attempt + 1)}>Retry waveform</button>}</p>}
+    <svg className="sample-wave" viewBox="0 0 512 100" preserveAspectRatio="none" role="img" aria-label={peaks.length ? "Audio waveform with selected region" : status}>
+      <rect x={start * 512} y="0" width={(end - start) * 512} height="100" fill="currentColor" opacity=".1" />
+      <path d={peaks.map((p, i) => `M${i},${50 - p * 47}V${50 + p * 47}`).join(" ")} stroke="currentColor" strokeWidth="1" />
+      <path d={`M${start * 512},0V100 M${end * 512},0V100`} stroke="currentColor" strokeWidth="2" />
+    </svg>
+  </div>;
 }
 
 type ListedSound = UserAudioEntry & { status: string };
-export function UserSounds({ track, onSelect }: { track?: Track; onSelect: (id: string) => void }) {
+export function UserSounds({ track, onSelect, onCapture }: { track?: Track; onSelect: (id: string) => void; onCapture: () => void }) {
   const state = useProject()!, connection = useConnection();
   const [entries, setEntries] = useState<ListedSound[]>([]), [search, setSearch] = useState(""), [filter, setFilter] = useState("All"), [message, setMessage] = useState(""), [busy, setBusy] = useState(false), [limit, setLimit] = useState(20);
   const [pending, setPending] = useState<File[]>([]), [relink, setRelink] = useState<string | undefined>();
@@ -65,7 +76,7 @@ export function UserSounds({ track, onSelect }: { track?: Track; onSelect: (id: 
       <SoundDetails entry={e} disabled={disabled} reload={load} />
       {e.status === "missing" && <button disabled={disabled} onClick={() => { setRelink(e.id); setTimeout(() => files.current?.click(), 0); }}>Relink original WAV</button>}
     </article>)}</div>
-    {!filtered.length && <p>Your next sound belongs here. Add a WAV or open Capture.</p>}
+    {!filtered.length && <div className="library-empty"><p>{entries.length ? "No sounds match. Try another name or filter." : "Your next sound belongs here. Add a WAV or record something around you."}</p>{entries.length ? <button onClick={() => { setSearch(""); setFilter("All"); }}>Clear sound filters</button> : <button onClick={onCapture}>Open Capture →</button>}</div>}
     {filtered.length > limit && filter !== "Recent" && <button onClick={() => setLimit(limit + 20)}>More sounds</button>}
     <button className="text-button" onClick={() => void load()}>Refresh My Sounds</button>
     <small>Copies stay in Beatbox. Importing and library details do not add musical Undo; assigning a sound does.</small>
@@ -119,16 +130,16 @@ function InputMeter({ ready }: { ready: boolean }) {
   useEffect(() => { if (!ready) return; let stopped = false; let timer: ReturnType<typeof setTimeout>; const poll = async () => { try { const r = await fetch("/audio/input-meter", { signal: AbortSignal.timeout(1500) }); if (r.ok && !stopped) setLevel(await r.json()); } catch { if (!stopped) setLevel({ available: false, peak: 0 }); } if (!stopped) timer = setTimeout(poll, 100); }; void poll(); return () => { stopped = true; clearTimeout(timer); }; }, [ready]);
   return <div className="input-meter"><meter aria-label="Input level" min={0} max={1} high={0.9} optimum={0.35} value={ready && level.available ? level.peak : 0} /><span>{!ready || !level.available ? "Input level unavailable" : level.peak >= 0.98 ? "Clipping — lower input gain" : level.peak < 0.005 ? "Very low / no signal" : "Signal present"}</span></div>;
 }
-export function CapturePanel() {
+export function CapturePanel({ onSounds }: { onSounds: () => void }) {
   const state = useProject()!, connection = useConnection(), c = state.capture;
   const [name, setName] = useState("My captured sound"), [device, setDevice] = useState(""), [channel, setChannel] = useState(0);
   const disabled = !connection.connected || !!connection.busy;
-  return <div className="library-content capture-panel"><span className="eyebrow">FROM THE WORLD TO YOUR GROOVE</span><h3>Heard something?<br />Keep it.</h3><p>Capture an external input as a sound. Project Recording records your Beatbox performance.</p>
-    <label>Input device<select aria-label="Capture input device" disabled={disabled || !!c?.activeId} value={device} onChange={e => setDevice(e.target.value)}><option value="">Backend default input</option>{state.input?.devices.map(d => <option key={d}>{d}</option>)}</select></label>
-    <small>{state.input?.enumeration ? "Device list is available after audio boots. Prepare input restarts audio; stop playback first." : "Device enumeration unavailable. Use your backend's configured input; no device list is assumed."}</small>
+  return <div className="library-content capture-panel"><span className="eyebrow">FROM THE WORLD TO YOUR GROOVE</span><h3>Heard something?<br />Keep it.</h3><p>Record an input → Keep as Sample → use it in My Sounds. Rec in the top bar records your whole jam.</p>
+    <label>Input device<select aria-label="Capture input device" disabled={disabled || !!c?.activeId} value={device} onChange={e => setDevice(e.target.value)}><option value="">Default audio input</option>{state.input?.devices.map(d => <option key={d}>{d}</option>)}</select></label>
+    <small>{state.input?.enumeration ? "Device list is available after audio boots. Prepare input restarts audio; stop playback first." : "Beatbox cannot list inputs on this system. It will use the input configured in your audio setup."}</small>
     <label>Input channel<select aria-label="Capture input channel" value={channel} disabled={disabled || !!c?.activeId} onChange={e => setChannel(+e.target.value)}><option value="0">Input 1 (mono)</option><option value="1">Input 2 (mono)</option></select></label>
     <button disabled={disabled || !!c?.activeId} onClick={() => void client.command({ cmd: "capture.prepare", device, channel }, "Prepare input")}>Prepare input</button>
-    <p role="status">{c?.inputReady ? `Input ready · ${state.input?.configuration?.device || "backend default"} · channel ${(state.input?.configuration?.channel ?? 0) + 1}` : "Input is not prepared"}</p>
+    <p role="status">{c?.inputReady ? `Input ready · ${state.input?.configuration?.device || "default audio input"} · channel ${(state.input?.configuration?.channel ?? 0) + 1}` : "Input is not prepared"}</p>
     <InputMeter ready={!!c?.inputReady} />
     <Range label="Input gain" value={c?.gain ?? 1} max={2} disabled={disabled || !c?.inputReady} onCommit={gain => void client.command({ cmd: "capture.controls", gain, monitor: c?.monitor ?? false }, "Input gain")} />
     <button disabled={disabled || !c?.inputReady} aria-pressed={!!c?.monitor} onClick={() => void client.command({ cmd: "capture.controls", gain: c?.gain ?? 1, monitor: !c?.monitor }, "Monitor input")}>{c?.monitor ? "Monitor ON" : "Monitor OFF"}</button><small>Use headphones when monitoring to avoid feedback.</small>
@@ -136,6 +147,6 @@ export function CapturePanel() {
     <button className="capture-record primary" disabled={disabled || !c?.inputReady || !name.trim()} onClick={() => void client.command(c?.activeId ? { cmd: "capture.stop", value: c.activeId } : { cmd: "capture.start", value: name }, c?.activeId ? "Finish capture" : "Capture input")}>{c?.activeId ? "■ Stop capture" : "● Record input"}</button>
     <small>Dry input after gain · five-minute maximum. Keep the original, then add Distortion, Reverb or other track FX.</small>
     {c?.warning && <p role="alert">{c.warning}</p>}
-    {c?.takes.filter(t => t.state !== "discarded").slice(0, 8).map(t => <article className="capture-take" key={t.id}><h4>{t.name}</h4><p role="status">{t.state}{t.duration ? ` · ${t.duration.toFixed(1)}s` : ""}</p>{t.error && <p role="alert">{t.error}</p>}{["ready", "kept"].includes(t.state) && <Waveform url={`/audio/capture/${t.id}/wave`} />}{t.state === "ready" && <div className="sample-actions"><button disabled={disabled} onClick={() => void client.command({ cmd: "capture.preview", value: t.id }, "Preview take")}>▷ Play take</button><button className="primary" disabled={disabled} onClick={() => void client.command({ cmd: "capture.keep", value: t.id }, "Keep as Sample")}>Keep as Sample</button><button disabled={disabled} onClick={() => void client.command({ cmd: "capture.discard", value: t.id }, "Discard take")}>Discard</button></div>}{t.state === "kept" && <p>Kept in My Sounds · ready to play and sequence.</p>}{["failed", "interrupted"].includes(t.state) && <button disabled={disabled} onClick={() => void client.command({ cmd: "capture.discard", value: t.id }, "Discard incomplete take")}>Discard incomplete take</button>}</article>)}
+    {c?.takes.filter(t => t.state !== "discarded").slice(0, 8).map(t => <article className="capture-take" key={t.id}><h4>{t.name}</h4><p role="status">{t.state}{t.duration ? ` · ${t.duration.toFixed(1)}s` : ""}</p>{t.error && <p role="alert">{t.error}</p>}{["ready", "kept"].includes(t.state) && <Waveform url={`/audio/capture/${t.id}/wave`} />}{t.state === "ready" && <div className="sample-actions"><button disabled={disabled} onClick={() => void client.command({ cmd: "capture.preview", value: t.id }, "Preview take")}>▷ Play take</button><button className="primary" disabled={disabled} onClick={() => void client.command({ cmd: "capture.keep", value: t.id }, "Keep as Sample")}>Keep as Sample</button><button disabled={disabled} onClick={() => void client.command({ cmd: "capture.discard", value: t.id }, "Discard take")}>Discard</button></div>}{t.state === "kept" && <div><p>Kept in My Sounds · ready to play and sequence.</p><button className="primary" onClick={onSounds}>Use this sound →</button></div>}{["failed", "interrupted"].includes(t.state) && <button disabled={disabled} onClick={() => void client.command({ cmd: "capture.discard", value: t.id }, "Discard incomplete take")}>Discard incomplete take</button>}</article>)}
   </div>;
 }

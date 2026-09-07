@@ -39,7 +39,7 @@ export function SoundLibrary({ track }: { track?: Track }) {
     {state.preview?.state === "unavailable" && <p role="alert">{state.preview.error}</p>}
     {state.preview?.state === "previewing" && <button disabled={disabled} onClick={() => void client.command({ cmd: "preview.stop" }, "Stop preview")}>Stop preview</button>}
     <ul className="sound-results" aria-label="Available sounds">{filtered.slice(0, count).map(s => <li key={s.key}><button aria-label={`Preview ${s.label} ${s.file}`} aria-pressed={candidate?.key === s.key} disabled={disabled} onClick={() => { setCandidate(s); void client.command({ cmd: "preview.play", value: s.key }, "Preview"); }}><span className="preview-symbol" aria-hidden="true">▷</span><span>{s.label}<small>{s.file}</small></span><span className="preview-word">Preview</span></button></li>)}</ul>
-    {!filtered.length && <p>{sounds.length ? "No sounds match this search." : "No installed sounds found."}</p>}
+    {!filtered.length && <div className="library-empty"><p>{sounds.length ? "No sounds match this search." : "No installed sounds found. Check your sound library setup in System."}</p>{sounds.length ? <button onClick={() => { setSearch(""); setBank(""); }}>Clear sound filters</button> : <a href="/system">Open System →</a>}</div>}
     {filtered.length > count && <button onClick={() => setCount(count + 30)}>More sounds ({filtered.length - count})</button>}
     <button className="text-button" onClick={() => void load()}>Refresh sounds</button>
     <small className="library-source">Dirt-Samples · grouped by its original sound banks</small>
