@@ -1,3 +1,4 @@
+import { macroOffset } from "./jam-model.js";
 import {
   instruments,
   effects,
@@ -16,7 +17,7 @@ function controls(d: SoundDefinition, insert = false) {
   return d.parameters
     .map(
       (p) =>
-        `var ${p.id} = (Lag.kr(${insert && p.automatable ? `Select.kr(\\a${p.id}enabled.kr(0), [\\abx${p.id}.kr(${p.default}), \\a${p.id}value.kr(${p.default})])` : `\\abx${p.id}.kr(${p.default})`}, 0.02) + (Select.kr(\\m${p.id}kind.kr(0), [SinOsc.kr(\\m${p.id}rate.kr(1)), LFNoise0.kr(\\m${p.id}rate.kr(1)), EnvGen.kr(Env.perc(0.01, 1), Impulse.kr(\\m${p.id}rate.kr(1)))]) * Lag.kr(\\m${p.id}amount.kr(0), 0.02))).clip(0, 1);`,
+        `var ${p.id} = (Lag.kr(${insert && p.automatable ? `Select.kr(\\a${p.id}enabled.kr(0), [\\abx${p.id}.kr(${p.default}), \\a${p.id}value.kr(${p.default})])` : `\\abx${p.id}.kr(${p.default})`}, 0.02) + Lag.kr(\\j${p.id}.kr(0), 0.02) + (Select.kr(\\m${p.id}kind.kr(0), [SinOsc.kr(\\m${p.id}rate.kr(1)), LFNoise0.kr(\\m${p.id}rate.kr(1)), EnvGen.kr(Env.perc(0.01, 1), Impulse.kr(\\m${p.id}rate.kr(1)))]) * Lag.kr(\\m${p.id}amount.kr(0), 0.02))).clip(0, 1);`,
     )
     .join("\n");
 }
@@ -117,6 +118,7 @@ export function rackCommand(p: ProjectDocument, running = true): string {
         const values = Object.fromEntries(
           d.parameters.flatMap((param) => [
             ["abx" + param.id, f.values[param.id]],
+            ["j" + param.id, macroOffset(p, t.id, `fx.${f.id}.${param.id}`)],
             ["m" + param.id + "amount", 0],
             ["m" + param.id + "rate", 1],
             ["m" + param.id + "kind", 0],

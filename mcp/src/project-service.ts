@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { applyEdits, clone, emptyProject, validateProject, type ProjectDocument } from "./project.js";
+import { applyEdits, clone, emptyProject, validateProject, uid, type ProjectDocument } from "./project.js";
 import { ProjectStorage } from "./project-storage.js";
 import { resolveSample } from "./sound-library.js";
 
@@ -69,5 +70,51 @@ export class ProjectService {
       }
       return { id: a.id, status, reference: a.reference };
     });
+  }
+}
+
+// Exploration references use the same validated document snapshots as Undo.
+// Only ProjectService.current can be played/saved; these are inert alternatives.
+export class ExplorationTrail {
+  private entries: { id: string; label: string; kept: boolean; fingerprint: string; document: ProjectDocument; summary?: import("./jam.js").JamSummary; parentId: string | null }[] = [];
+  private projectId = "";
+  private fingerprint(p: ProjectDocument) { return createHash("sha256").update(JSON.stringify({ ...p, revision: 0 })).digest("hex"); }
+  reset(p: ProjectDocument) { this.entries = []; this.projectId = p.id; }
+  inspect(p: ProjectDocument) {
+    if (this.projectId !== p.id) this.reset(p);
+    const current = this.fingerprint(p);
+    return this.entries.map(({ document, fingerprint, ...entry }) => ({ ...entry, revision: document.revision, current: current === fingerprint }));
+  }
+  private add(p: ProjectDocument, label: string, parentId: string | null, summary?: import("./jam.js").JamSummary) {
+    const fingerprint = this.fingerprint(p);
+    const match = this.entries.find(e => e.fingerprint === fingerprint);
+    if (match) return match;
+    const entry = { id: "idea_" + uid(), label, kept: false, fingerprint, document: clone(p), summary: summary && clone(summary), parentId };
+    this.entries.push(entry);
+    // Preserve Original plus explicitly kept ideas. Favorite capacity reserves
+    // room for Original/current (each <=4 MiB) within the 16 MiB JSON budget.
+    while (this.entries.length > 12 || this.entries.length > 2 && JSON.stringify(this.entries).length > 16 * 1024 * 1024) {
+      const index = this.entries.findIndex((e, i) => i > 0 && !e.kept && e.id !== entry.id);
+      if (index < 0) throw new Error("Session idea capacity reached; save your current jam");
+      this.entries.splice(index, 1);
+    }
+    return entry;
+  }
+  record(before: ProjectDocument, after: ProjectDocument, label: string, summary?: import("./jam.js").JamSummary) {
+    this.inspect(before);
+    const parent = this.add(before, this.entries.length ? "Before " + label : "Original", null);
+    this.add(after, label, parent.id, summary);
+  }
+  keep(p: ProjectDocument) {
+    this.inspect(p);
+    const current = this.entries.find(e => e.fingerprint === this.fingerprint(p));
+    if (current?.kept) return;
+    const favorites = this.entries.slice(1).filter(e => e.kept);
+    if (current !== this.entries[0] && (favorites.length >= 6 || JSON.stringify(favorites.map(e => e.document)).length + JSON.stringify(p).length > 7 * 1024 * 1024)) throw new Error("Session favorites are full. Save your current jam or promote its clips to a scene.");
+    const entry = this.add(p, "Kept idea", null); entry.kept = true;
+  }
+  target(p: ProjectDocument, id: string) {
+    this.inspect(p); const entry = this.entries.find(e => e.id === id); if (!entry) throw new Error("This idea is no longer in the session trail");
+    return { ...clone(entry.document), revision: p.revision };
   }
 }

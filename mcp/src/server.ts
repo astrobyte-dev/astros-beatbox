@@ -1,3 +1,4 @@
+import { variationSchema, jamLockSchema, macroSchema, verbSchema } from "./jam-model.js";
 import { samplePlaybackSchema, libraryDetailsSchema } from "./sampling.js";
 import { instruments, effects } from "./sound-lab.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -42,6 +43,18 @@ async function execute(command: unknown) {
     return { ...text(JSON.stringify({ ok: false, operationId: request.operationId, sessionId: request.sessionId, generation: observed.generation, code: "UNCONFIRMED", error: "Runtime response unavailable; execution is uncertain. Read status before issuing another action. " + String(e) })), isError: true };
   }
 }
+for (const action of ["start", "stop", "keep"] as const) server.tool("jam_capture_" + action, "Performance event notebook: " + action + ". Up to 128 acknowledged events. Only scene launches carry engine scheduled cycles. No replay/arrangement conversion; distinct from audio recording.", projectMeta, args => execute({ ...args, cmd: "jam.capture." + action }));
+server.tool("jam_inspect", "Inspect canonical Jam capabilities, locks, macros, semantic verbs and bounded session trail. No audio boot.", async () => { const s = await state(); return text(JSON.stringify({ ...s.jam, constraints: s.project.jam, projectId: s.project.id, revision: s.project.revision })); });
+server.tool("jam_variation", "Create one seeded canonical variation/Chaos/fill. Obeys track/rhythm/sound/FX/motion and parameter locks; rejects unsupported unlocked scopes. Deliberate silence stays silent.", { ...projectMeta, request: variationSchema }, args => execute({ ...args, cmd: "jam.variation" }));
+server.tool("jam_lock", "Replace one track's persistent Jam Keep/Change constraints. Track lock protects all generated changes. Explicit editing/Undo/return remain available.", { ...projectMeta, lock: jamLockSchema }, args => execute({ ...args, cmd: "jam.lock" }));
+server.tool("jam_verb", "Apply a supported semantic musical recipe as one Undo action with change summary.", { ...projectMeta, verb: verbSchema, trackIds: z.array(z.string()).min(1).max(16) }, args => execute({ ...args, cmd: "jam.verb" }));
+server.tool("jam_macro_assign", "Create/replace a project macro using stable semantic targets. Offsets preserve base, automation and modulation. At most eight macros.", { ...projectMeta, macro: macroSchema }, args => execute({ ...args, cmd: "jam.macro.put" }));
+server.tool("jam_macro_value", "Set normalized signed macro offset (-1 to 1), one gesture/intention. Zero restores underlying sound; locks suppress protected targets.", { ...projectMeta, macroId: z.string(), value: z.number().min(-1).max(1), groupId: z.string().max(100).optional() }, args => execute({ ...args, cmd: "jam.macro.value" }));
+server.tool("jam_macros_suggest", "Add missing capability-based project macros with neutral values.", projectMeta, args => execute({ ...args, cmd: "jam.macros.suggest" }));
+server.tool("jam_macros_reset", "Reset macro values to neutral without changing authored base or automation/modulation.", projectMeta, args => execute({ ...args, cmd: "jam.macros.reset" }));
+server.tool("jam_return", "Return to a bounded session idea using canonical history. Explicit restoration includes that idea's constraints and mappings; one Undo.", { ...projectMeta, ideaId: z.string() }, args => execute({ ...args, cmd: "jam.return" }));
+server.tool("jam_keep", "Mark current idea in the session trail. Save the project for disk persistence or promote its clips to a scene.", projectMeta, args => execute({ ...args, cmd: "jam.keep" }));
+server.tool("jam_promote", "Copy current clips and clip automation to an independent scene, one Undo. Instruments, FX and macros remain shared as in P3.", { ...projectMeta, sceneId: z.string(), name: z.string().min(1).max(120) }, args => execute({ ...args, cmd: "jam.promote" }));
 server.tool("user_audio_library", "List user/captured sounds and immutable content identities, details, missing state and import progress. No audio boot.", async () => { const r = await fetch(runtime.url + "/audio/library"); return text(JSON.stringify(await r.json())); });
 server.tool("user_audio_import", "Import ONE explicit absolute WAV path (PCM16 mono/stereo, max 256 MiB/15 minutes). Copies to managed storage; no folder crawling. Optional assetId relinks exact content.", { ...retry, value: z.string(), assetId: z.string().optional() }, args => execute({ ...args, cmd: "audio.import" }));
 server.tool("user_audio_details", "Rename, favorite, tag or collect a sound. Library revision guards metadata; musical Undo never deletes audio.", { ...retry, assetId: z.string(), libraryRevision: z.number().int(), details: libraryDetailsSchema }, args => execute({ ...args, cmd: "audio.details" }));

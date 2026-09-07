@@ -10,6 +10,9 @@ export interface SoundParameter {
   max: number;
   step: number;
   meaning: string;
+  // Signed normalized travel for Jam recipes/macros; the existing meaning is
+  // the semantic identity. Omitted controls are deliberately not Jam targets.
+  jam?: number;
   automatable?: boolean;
   advanced?: boolean;
   unit?: string;
@@ -39,6 +42,7 @@ const control = (
   step: 0.001,
   unit: "%",
   meaning,
+  ...(!advanced && ["brightness", "dirt", "space", "movement", "energy"].includes(meaning) ? { jam: 0.35 } : {}),
   automatable: true,
   advanced,
 });
@@ -199,9 +203,9 @@ export const effects: SoundDefinition[] = [
     "Dirt",
     "Coarse steps and broken digital edges.",
     [
-      control("bits", "Resolution", 0.7),
+      { ...control("bits", "Resolution", 0.7, "dirt"), jam: -0.35 },
       control("rate", "Sample rate", 0.8),
-      control("mix", "Mix", 0.35),
+      control("mix", "Mix", 0.35, "dirt"),
     ],
     [["Broken", { bits: 0.25, rate: 0.3 }]],
   ),
@@ -240,7 +244,7 @@ export const effects: SoundDefinition[] = [
     [
       control("rate", "Rate", 0.2, "movement"),
       control("depth", "Depth", 0.4, "movement"),
-      control("mix", "Mix", 0.35),
+      control("mix", "Mix", 0.35, "movement"),
     ],
     [["Shimmer", { depth: 0.7 }]],
   ),
