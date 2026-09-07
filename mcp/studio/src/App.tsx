@@ -1,3 +1,4 @@
+import { UserSounds, CapturePanel } from "./Sampling";
 import { InstrumentBrowser, SoundLab } from "./SoundLab";
 import { definition } from "../../src/sound-lab";
 import {
@@ -291,6 +292,8 @@ export function App() {
             {[
               ["Grooves", "groove"],
               ["Sounds", "sound"],
+              ["My Sounds", "sound"],
+              ["Capture", "sound"],
               ["Synths", "sound"],
               ["My Jams", "folder"],
               ["Recordings", "sound"],
@@ -355,6 +358,10 @@ export function App() {
             <InstrumentBrowser project={p} sceneId={state.workspace.selectedSceneId ?? p.sceneOrder[0]} disabled={disabled} onSelect={select} />
           ) : library === "Sounds" ? (
             <SoundLibrary track={track} />
+          ) : library === "My Sounds" ? (
+            <UserSounds track={track} onSelect={select} />
+          ) : library === "Capture" ? (
+            <CapturePanel />
           ) : library === "Recordings" ? (
             <Recordings />
           ) : (
@@ -514,7 +521,7 @@ export function App() {
                         clip={c}
                         sound={
                           t.source?.type === "synth" ? `${definition("instrument", t.source.definitionId, t.source.version)?.name ?? "Unavailable instrument"} / synth` : a
-                            ? `${a.name}${a.index ? " · " + (a.index + 1) : ""} / ${a.kind}`
+                            ? a.audio ? `${a.audio.originalName} · ${a.source?.origin === "captured" ? "Captured" : "My Sounds"}` : `${a.name}${a.index ? " · " + (a.index + 1) : ""} / ${a.kind}`
                             : c
                               ? "Custom instrument"
                               : "No active rhythm"
@@ -817,7 +824,7 @@ function Inspector({
         />
         <span>
           {track.source?.type === "synth" ? `${definition("instrument", track.source.definitionId, track.source.version)?.name ?? "Unavailable instrument"} · synth` : sound
-            ? `${sound.name} · ${sound.kind} ${sound.index + 1}`
+            ? sound.audio ? `${sound.audio.originalName} · ${sound.audio.duration.toFixed(1)}s` : `${sound.name} · ${sound.kind} ${sound.index + 1}`
             : "Custom Tidal instrument"}
         </span>
       </div>

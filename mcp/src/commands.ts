@@ -1,3 +1,4 @@
+import { samplePlaybackSchema, libraryDetailsSchema } from "./sampling.js";
 import { z } from "zod";
 import { editSchema, type ProjectEdit, type ProjectDocument } from "./project.js";
 
@@ -15,6 +16,15 @@ const code = z.string().trim().min(1).max(65536);
 const bare = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd) }).strict();
 const layer = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd), slot }).strict();
 export const commandSchema = z.union([
+  z.object({ ...meta, cmd: z.literal("audio.import"), value: z.string().min(1).max(2048), assetId: z.string().regex(/^audio_[a-f0-9]{64}$/).optional() }).strict(),
+  z.object({ ...meta, cmd: z.literal("audio.details"), assetId: z.string(), libraryRevision: z.number().int().nonnegative(), details: libraryDetailsSchema }).strict(),
+  z.object({ ...meta, cmd: z.literal("audio.add"), value: z.string(), projectId: z.string(), revision: z.number().int().nonnegative() }).strict(),
+  z.object({ ...meta, cmd: z.literal("audio.assign"), value: z.string(), clipId: z.string(), projectId: z.string(), revision: z.number().int().nonnegative() }).strict(),
+  z.object({ ...meta, cmd: z.literal("audio.preview"), value: z.string(), playback: samplePlaybackSchema.optional() }).strict(),
+  z.object({ ...meta, cmd: z.literal("capture.prepare"), device: z.string().max(512).refine(s => !/[\r\n\0]/.test(s)), channel: z.number().int().min(0).max(1) }).strict(),
+  z.object({ ...meta, cmd: z.literal("capture.controls"), gain: z.number().finite().min(0).max(2), monitor: z.boolean() }).strict(),
+  z.object({ ...meta, cmd: z.literal("capture.start"), value: z.string().trim().min(1).max(120) }).strict(),
+  ...["capture.stop", "capture.keep", "capture.discard", "capture.preview"].map(cmd => z.object({ ...meta, cmd: z.literal(cmd), value: z.string().uuid() }).strict()),
   bare("boot"),
   z.object({ ...meta, cmd: z.literal("scene.launch"), projectId: z.string(), revision: z.number().int().nonnegative(), sceneId: z.string(), boundary: z.enum(["immediate", "cycle"]).default("cycle"), repeat: z.boolean().optional() }).strict(),
   z.object({ ...meta, cmd: z.literal("code.apply"), projectId: z.string(), revision: z.number().int().nonnegative(), clipId: z.string() }).strict(),
@@ -39,7 +49,7 @@ export const commandSchema = z.union([
   z.object({ ...meta, cmd: z.literal("setdevice"), value: z.string().max(512).refine((s) => !/[\r\n\0]/.test(s)) }).strict(),
 ]);
 // A compact wire type; runtime validation above narrows each command's fields.
-export interface Command { cmd: string; sceneId?: string; boundary?: "immediate" | "cycle"; repeat?: boolean; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
+export interface Command { cmd: string; assetId?: string; libraryRevision?: number; details?: import("./sampling.js").LibraryDetails; playback?: import("./sampling.js").SamplePlayback; device?: string; channel?: number; gain?: number; monitor?: boolean; sceneId?: string; boundary?: "immediate" | "cycle"; repeat?: boolean; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
 export type CommandResult = {
   operationId: string; sessionId: string; generation: number;
   projectId?: string; revision?: number; project?: ProjectDocument; history?: { undo: number; redo: number };
@@ -62,5 +72,5 @@ export function validateCommand(input: unknown): Command {
 // Adapters require explicit optimistic concurrency for every external operation
 // that can target music. Runtime-only Stop/record/reset keep the P0a wire contract.
 export function requiresProjectRevision(cmd: string): boolean {
-  return cmd === "scene.launch" || cmd === "code.apply" || cmd === "performance.return" || cmd === "sound.replace" || ["eval", "eval_sc", "hush", "silence", "tempo", "set", "mute", "unmute", "solo", "unsolo", "load", "save", "resume"].includes(cmd) || cmd.startsWith("project.") || cmd.startsWith("song.");
+  return cmd === "audio.add" || cmd === "audio.assign" || cmd === "scene.launch" || cmd === "code.apply" || cmd === "performance.return" || cmd === "sound.replace" || ["eval", "eval_sc", "hush", "silence", "tempo", "set", "mute", "unmute", "solo", "unsolo", "load", "save", "resume"].includes(cmd) || cmd.startsWith("project.") || cmd.startsWith("song.");
 }

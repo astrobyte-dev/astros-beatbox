@@ -1,3 +1,4 @@
+import { SampleEditor } from "./Sampling";
 import { useState } from "react";
 import type { ProjectDocument, Track, ProjectEdit } from "../../src/project";
 import {
@@ -291,7 +292,7 @@ export function SoundLab({
         <span className="lab-source">{source ? "SYNTH" : "SAMPLE / CODE"}</span>
       </header>
       <nav className="lab-tabs" aria-label="Sound Lab sections">
-        {["Notes", "Instrument", "FX", "Motion"].map((name) => (
+        {["Notes", "Instrument", ...(!source && clip?.kind === "steps" ? ["Sample"] : []), "FX", "Motion"].map((name) => (
           <button
             key={name}
             aria-pressed={tab === name}
@@ -303,6 +304,7 @@ export function SoundLab({
           </button>
         ))}
       </nav>
+      {tab === "Sample" && clip?.kind === "steps" && !source && <SampleEditor key={clip.id} project={p} clip={clip} disabled={disabled} />}
       {tab === "Instrument" && (
         <div className="lab-instrument">
           <label>

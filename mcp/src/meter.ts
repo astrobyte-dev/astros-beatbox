@@ -4,6 +4,7 @@ import dgram from "node:dgram";
 // ("MTR <l> <r>") over UDP, so the dashboard can show a live master meter
 // without flooding sclang's stdout.
 export class Meter {
+  input = { peak: 0, at: 0 };
   l = 0;
   r = 0;
   lastUpdate = 0;
@@ -27,7 +28,9 @@ export class Meter {
     this.port = port;
     this.sock.on("message", (buf) => {
       const parts = buf.toString("utf8").trim().split(/\s+/);
-      if (parts[0] === "MTR") {
+      if (parts[0] === "INPUT") {
+        const peak = Number(parts[1]); if (Number.isFinite(peak) && peak >= 0) this.input = { peak: Math.min(2, peak), at: Date.now() };
+      } else if (parts[0] === "MTR") {
         this.l = Math.min(1, Math.max(0, parseFloat(parts[1]) || 0));
         this.r = Math.min(1, Math.max(0, parseFloat(parts[2]) || 0));
         this.lastUpdate = Date.now();

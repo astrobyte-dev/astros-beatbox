@@ -33,5 +33,6 @@ jobs:
       - run: npm run selftest:system
       - run: npm run selftest:p3
       - run: npm run selftest:p35
+      - run: npm run selftest:p35b
       - if: runner.os == 'Linux'
         run: npm run selftest:linux

@@ -1,3 +1,4 @@
+import { INSTALL_SAMPLE_ENVELOPE } from "./sampling-engine.js";
 import { INSTALL_FX_AUTOMATION } from "./fx-automation.js";
 import { SOUND_LAB_SYNTHS } from "./sound-lab-engine.js";
 import dgram from "node:dgram";
@@ -32,6 +33,8 @@ export class Engine extends EventEmitter {
   tidal = new Tidal();
   state: "idle" | "booting" | "ready" | "degraded" | "error" = "idle";
   error: string | null = null;
+  inputDevices: string[] = [];
+  inputConfiguration = { enabled: false, device: "", channel: 0 };
   devices: string[] = [];        // available audio output devices (WASAPI)
   readonly audioCapabilities = AUDIO_CAPABILITIES;
   currentDevice = "";            // device the engine is (re)booting with
@@ -93,13 +96,14 @@ export class Engine extends EventEmitter {
       this.bootPromise = (async () => {
         await this.checkPorts(); check();
         this.loadedSamples = new Map(soundLibrary(DIRT_SAMPLES_DIR).map(s => [s.key, { hash: fingerprint(path.join(DIRT_SAMPLES_DIR, s.key)), index: s.index }]));
-        sc.start(); await sc.bootSuperDirt(); check();
+        sc.start(); await sc.bootSuperDirt(120000, this.inputConfiguration); check();
         td.start(); await td.waitConnected(); check();
         // GHCi can continue to a later prompt after a boot-file error. Force the
         // actual stream binding before declaring the interpreter usable.
         await td.eval("do { _ <- Control.Exception.evaluate tidal; pure () }", "boot-tidal"); check();
         await td.eval("setcps (120/60/4)", "boot-tempo"); check();
         await this.installChannels(); check();
+        await sc.evalRoutine(INSTALL_SAMPLE_ENVELOPE, "install-sample-envelope"); check();
         await this.installMaster(); check();
         await this.installScope(); check();
         await this.queryDevices(); check();
@@ -200,9 +204,10 @@ export class Engine extends EventEmitter {
     if (!AUDIO_CAPABILITIES.deviceSelection) { this.devices = []; return; }
     try {
       const result = await this.sclang.eval(
-        `ServerOptions.devices.do { |d| ("AUDIO" ++ "DEV<<" ++ d ++ ">>").postln }; ("AUDIO" ++ "DEVDONE").postln;`,
+        `ServerOptions.inDevices.do { |d| ("INPUT" ++ "DEV<<" ++ d ++ ">>").postln }; ServerOptions.devices.do { |d| ("AUDIO" ++ "DEV<<" ++ d ++ ">>").postln }; ("AUDIO" ++ "DEVDONE").postln;`,
       );
       const tail = result.output;
+      this.inputDevices = [...tail.matchAll(/INPUTDEV<<(.+?)>>/g)].map(m => m[1]);
       const set = new Set<string>();
       const re = /AUDIODEV<<(.+?)>>/g;
       let m: RegExpExecArray | null;
@@ -227,6 +232,12 @@ export class Engine extends EventEmitter {
       this.state = "error"; this.error = "Owned-process cleanup failed: " + failures.join("; ");
       throw new Error(this.error);
     }
+  }
+
+  async configureInput(configuration: { enabled: boolean; device: string; channel: number }): Promise<void> {
+    if (configuration.device && (!this.audioCapabilities.deviceSelection || !this.inputDevices.includes(configuration.device))) throw new Error("Input device is unavailable; refresh devices or use the backend default");
+    this.inputConfiguration = { ...configuration };
+    await this.reboot();
   }
 
   async reboot(): Promise<void> {
