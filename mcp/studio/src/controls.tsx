@@ -69,6 +69,7 @@ export function Range({
   max = 1,
   step = 0.01,
   unit = "",
+  precision = 2,
   disabled,
   onCommit,
 }: {
@@ -78,6 +79,7 @@ export function Range({
   max?: number;
   step?: number;
   unit?: string;
+  precision?: number;
   disabled?: boolean;
   onCommit: (value: number, base: EditBase) => void;
 }) {
@@ -103,7 +105,7 @@ export function Range({
       <span>
         {label}
         <output>
-          {Number((draft ?? value).toFixed(2))}
+          {Number((draft ?? value).toFixed(precision))}
           {unit}
         </output>
       </span>

@@ -1,3 +1,4 @@
+import { audioHttp, type AudioResources } from "./audio-http.js";
 import http from "node:http";
 import { readFileSync, readdirSync, statSync, createReadStream } from "node:fs";
 import path from "node:path";
@@ -28,7 +29,7 @@ export function startDashboard(
   getState: () => unknown,
   getClock: () => unknown,
   onCmd: CmdHandler,
-  resources?: { sounds?: () => unknown; recordings?: RecordingCatalog; identity?: () => unknown; shutdown?: (session: string) => Promise<string>; system?: () => Promise<unknown>; logs?: (query: URLSearchParams) => unknown; bridge?: (body: unknown) => void },
+  resources?: { audio?: () => AudioResources | undefined; sounds?: () => unknown; recordings?: RecordingCatalog; identity?: () => unknown; shutdown?: (session: string) => Promise<string>; system?: () => Promise<unknown>; logs?: (query: URLSearchParams) => unknown; bridge?: (body: unknown) => void },
 ): http.Server {
   const server = http.createServer((req, res) => {
     // Apply security headers to every response.
@@ -42,6 +43,7 @@ export function startDashboard(
       res.end("forbidden");
       return;
     }
+    if (audioHttp(req, res, resources?.audio?.())) return;
     // Vite's production bundle shares this service and the existing guarded API.
     // Only flat, generated asset names are accepted; never resolve request paths.
     const urlPath = (req.url || '/').split('?')[0];

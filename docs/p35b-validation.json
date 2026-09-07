@@ -1,0 +1,66 @@
+{
+  "phase": "P3.5B Capture & Sampling Lab",
+  "date": "2026-09-07",
+  "platform": "Ubuntu 24.04.4 LTS x86_64",
+  "node": "24.14.0",
+  "npm": "11.9.0",
+  "branch": "feat/p3.5b-capture-sampling",
+  "baseBranch": "feat/p3.5a-sound-lab-core",
+  "baseCommit": "3ea7f7b4441bdd456c83699f9a170c9e6c9a56d9",
+  "baseline": {
+    "clean": true,
+    "fetch": "pass",
+    "tests": 259,
+    "passed": 256,
+    "skipped": 3,
+    "build": "pass",
+    "typechecks": "pass",
+    "existingBrowserJourneys": 6,
+    "linuxRuntime": "pass"
+  },
+  "final": {
+    "tests": 304,
+    "passed": 301,
+    "skipped": 3,
+    "failed": 0,
+    "addedTests": 45,
+    "build": "pass",
+    "serverTypecheck": "pass",
+    "studioTypecheck": "pass",
+    "browserJourneys": {
+      "classic": "pass",
+      "studio": "pass",
+      "p2": "pass",
+      "p3": "pass",
+      "p35": "pass",
+      "p35b": "pass",
+      "system": "pass"
+    },
+    "linuxRuntime": "pass",
+    "samplingRetest": 45,
+    "screenshotWidths": [
+      1280,
+      1440,
+      1920
+    ],
+    "visualReview": "pass",
+    "browserJavascriptErrors": 0,
+    "horizontalPageOverflow": false
+  },
+  "fixtureAudio": true,
+  "physicalMicrophoneValidated": false,
+  "nativeAudioValidated": false,
+  "windowsValidated": false,
+  "inheritedGatesClosed": false,
+  "pendingGates": [
+    "P2.6 Windows desktop/audio",
+    "P3 native audio/timing and Windows",
+    "P3.5A native audio/timing/CPU and Windows",
+    "P3.5B native input/audio/timing/CPU and Windows"
+  ],
+  "systemPackagesChanged": false,
+  "p4Started": false,
+  "p5Started": false,
+  "merged": false,
+  "report": "p35b-capture-sampling.md"
+}
