@@ -36,7 +36,7 @@ export class ProcDriver extends EventEmitter {
     this.proc = spawn(this.exe, this.args, { env: this.env, ...this.spawnOpts, ...(this.ownTree && process.platform === "linux" ? { detached: true } : {}), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     this.proc.on("spawn", () => {
       this.startedAt = new Date().toISOString();
-      if (this.ownTree && this.proc?.pid && !this.exited) {
+      if (this.ownTree && this.proc?.pid && !this.exited && !(process.platform === "linux" && this.stopping)) {
         try { this.identity = captureOwnedIdentity(this.proc.pid); }
         catch (e) { this.fail("process", `Cannot verify interpreter ownership: ${String(e)}`); this.proc.kill(); }
       }
@@ -127,6 +127,9 @@ export class ProcDriver extends EventEmitter {
     this.stopping = true;
     this.fail("process", "Interpreter stopped; operation cancelled.");
     try {
+      // spawn() returns a PID before the 'spawn' event runs. A synchronous Stop
+      // in that gap must acquire proof now, not silently leave a live child.
+      if (process.platform === "linux" && this.ownTree && !this.identity && this.proc?.pid) this.identity = captureOwnedIdentity(this.proc.pid);
       if (this.identity && (!this.exited || process.platform === "linux")) stopManagedTree(this.identity);
     } finally {
       // Kill only the direct child handle. Descendants require separate ownership proof.

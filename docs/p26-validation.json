@@ -7,7 +7,7 @@
   "toolchain": {
     "node": "24.14.0",
     "npm": "11.9.0",
-    "python": "3.12 (system; pidfd capability checked)"
+    "python": "3.12.3 (system; pidfd capability checked)"
   },
   "build": "pass",
   "typecheck": {
@@ -15,11 +15,11 @@
     "studio": "pass"
   },
   "tests": {
-    "discovered": 176,
-    "passed": 173,
+    "discovered": 177,
+    "passed": 174,
     "failed": 0,
     "skipped": 3,
-    "newTests": 19,
+    "newTests": 20,
     "skips": "Existing native Windows ownership/inventory tests"
   },
   "browser": {
@@ -42,7 +42,8 @@
     "second-launch same session/runtime reuse",
     "browser failure preserves runtime",
     "SIGTERM/SIGINT/SIGHUP runtime shutdown",
-    "external HTTP conflict preserved"
+    "external HTTP conflict preserved",
+    "immediate Stop before spawn-event identity capture"
   ],
   "nativeAudio": {
     "status": "not attempted / not validated",

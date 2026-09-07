@@ -136,6 +136,12 @@ test("Managed Linux driver owns a new session and stop completes before return",
   assert.ok(driver.ownershipIdentity); const pid = driver.pid!; driver.stop();
   try { assert.equal(readLinuxIdentity(pid).state, "Z"); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 });
+test("Immediate Stop before the spawn event still captures and terminates its Linux child", linuxOnly, () => {
+  const driver = new ProcDriver(process.execPath, ["-e", "setInterval(()=>{},1000)"], process.env, {}, true);
+  driver.start(); const pid = driver.pid!; driver.stop();
+  assert.ok(driver.ownershipIdentity);
+  try { assert.equal(readLinuxIdentity(pid).state, "Z"); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+});
 test("Real Linux drivers complete application Restart, Stop and Quit without racing old sockets", linuxOnly, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "abx-linux-lifecycle-"));
   class Worker extends ProcDriver {
