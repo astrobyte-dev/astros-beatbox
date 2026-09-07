@@ -22,8 +22,8 @@ export function SoundLibrary({ track }: { track?: Track }) {
     <div className={`sound-target ${accent(track?.slot ?? 1)}`}>
       <span className="eyebrow">CHOOSING FOR</span>
       <h3>{track ? trackName(track.name, track.slot) : "Select an instrument"}</h3>
-      <p>{current ? `${current.name} · ${current.source?.file.split("/")[1] ?? `sample ${current.index + 1}`}` : "Select a visual rhythm to replace its sound."}</p>
-      {current && state.assets.find(a => a.id === current.id)?.status === "missing" && <p role="alert">Missing sound. Your rhythm is kept.</p>}
+      <p>{track?.source?.type === "synth" ? "Synth source · choosing a sample changes this track to samples." : current ? `${current.name} · ${current.source?.file.split("/")[1] ?? `sample ${current.index + 1}`}` : "Select a visual rhythm to replace its sound."}</p>
+      {track?.source?.type !== "synth" && current && state.assets.find(a => a.id === current.id)?.status === "missing" && <p role="alert">Missing sound. Your rhythm is kept.</p>}
     </div>
     <p>Preview a sound, then put it in your groove.</p>
     <label className="sound-filter">Sound bank<select aria-label="Sound bank" value={bank} onChange={e => { setBank(e.target.value); setCount(30); }}><option value="">All banks</option>{banks.map(b => <option key={b} value={b}>{b}</option>)}</select></label>

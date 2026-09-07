@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-const FLOOR = 204; // All 177 P0a–P2.6 tests plus 27 P3 composition/performance regressions.
+const FLOOR = 239; // All 204 P0a–P3 tests plus 35 Sound Lab regressions.
 
 const distDir = join(dirname(fileURLToPath(import.meta.url)), "dist");
 let files = [];

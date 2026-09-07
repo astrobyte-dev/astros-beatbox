@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
+import { sourceSchema, effectSchema, routeSchema, patchSchema, definition, validateValues, targetDefinition } from "./sound-lab.js";
 
 export const CHANNELS = 12;
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).refine(s => !["__proto__", "prototype", "constructor"].includes(s));
@@ -14,18 +15,18 @@ const mixerSchema = z.object({ level: finite.min(0).max(2), balance: finite.min(
 const assetSchema = z.object({ id, kind: z.enum(["sample", "synth", "file"]), reference: z.string().min(1).max(2048), name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), index: z.number().int().min(0).max(65535), source: z.object({ library: z.string().min(1).max(100), origin: z.enum(["bundled", "external"]), file: z.string().regex(/^[a-zA-Z0-9_-]+\/[^/\\\x00-\x1f]+$/).max(1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict();
 const clipBase = { id, trackId: id, name: z.string().max(120) };
 export const clipSchema = z.discriminatedUnion("kind", [
-  z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), parameters: params }).strict(),
+  z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), notes: z.array(finite.int().min(0).max(127)).min(1).max(128).optional(), octave: z.number().int().min(-4).max(4).optional(), parameters: params }).strict(),
   z.object({ ...clipBase, kind: z.literal("code"), source: z.string().min(1).max(65536), managed: z.boolean(), draft: z.string().max(65536).optional(), dependencyIds: z.array(id).max(128) }).strict(),
 ]);
-export const automationSchema = z.object({ id, trackId: id, clipId: id.nullable(), parameter: parameterSchema, enabled: z.boolean(), bars: z.number().int().min(1).max(64), values: z.array(finite.min(0).max(1)).min(2).max(128) }).strict();
-export const trackSchema = z.object({ id, name: z.string().max(120), slot: z.number().int().min(1).max(16), channel: z.number().int().min(0).max(CHANNELS - 1).nullable(), activeClipId: id.nullable(), mixer: mixerSchema }).strict();
+export const automationSchema = z.object({ id, trackId: id, clipId: id.nullable(), parameter: z.union([parameterSchema, z.string().regex(/^synth\.[a-z][a-z0-9]*$/)]), enabled: z.boolean(), bars: z.number().int().min(1).max(64), values: z.array(finite.min(0).max(1)).min(2).max(128) }).strict();
+export const trackSchema = z.object({ id, name: z.string().max(120), slot: z.number().int().min(1).max(16), channel: z.number().int().min(0).max(CHANNELS - 1).nullable(), activeClipId: id.nullable(), mixer: mixerSchema, source: sourceSchema.optional(), effects: z.array(effectSchema).max(8).optional(), modulation: z.array(routeSchema).max(16).optional() }).strict();
 const sceneSchema = z.object({ id, name: z.string().min(1).max(120), clips: z.record(id, id.nullable()) }).strict();
 const arrangementSchema = z.array(z.object({ id, sceneId: id, cycles: z.number().int().min(1).max(128) }).strict()).max(512);
 const documentSchema = z.object({
   schemaVersion: z.literal(1), id, revision: z.number().int().nonnegative().safe(), name: z.string().max(120),
   tempo: z.object({ bpm: finite.positive().max(1000), beatsPerCycle: finite.positive().max(32) }).strict(),
   tracks: z.array(trackSchema).max(16), clips: z.array(clipSchema).max(1024), scenes: z.array(sceneSchema).min(1).max(128), sceneOrder: z.array(id).min(1).max(128),
-  arrangement: arrangementSchema, arrangementLoop: z.boolean().optional(), assets: z.array(assetSchema).max(2048), automation: z.array(automationSchema).max(2048),
+  patches: z.array(patchSchema).max(128).optional(), arrangement: arrangementSchema, arrangementLoop: z.boolean().optional(), assets: z.array(assetSchema).max(2048), automation: z.array(automationSchema).max(2048),
   dependencies: z.array(z.object({ id, kind: z.enum(["tidal", "supercollider", "sample-library"]), name: z.string().min(1).max(200), version: z.string().max(100), source: z.string().max(65536) }).strict()).max(128),
   // Source artifacts are retained verbatim, never replayed as a recovery log.
   sources: z.array(z.object({ id, name: z.string().max(120), source: z.string().max(65536) }).strict()).max(128),
@@ -46,7 +47,8 @@ export function validateProject(value: unknown): ProjectDocument {
   const p = documentSchema.parse(value);
   for (const a of p.assets) if (a.kind === "sample" && a.reference !== a.name) throw new Error("Sample library references must match their registered sound name");
   const unique = (xs: string[], label: string) => { if (new Set(xs).size !== xs.length) throw new Error("Duplicate " + label); };
-  unique([p.id, ...p.tracks.map(t => t.id), ...p.clips.map(c => c.id), ...p.scenes.map(s => s.id), ...p.assets.map(a => a.id), ...p.automation.map(a => a.id), ...p.dependencies.map(d => d.id), ...p.arrangement.map(a => a.id), ...p.sources.map(s => s.id)], "identity");
+  unique([p.id, ...p.tracks.map(t => t.id), ...p.clips.map(c => c.id), ...p.scenes.map(s => s.id), ...p.assets.map(a => a.id), ...p.automation.map(a => a.id), ...p.dependencies.map(d => d.id), ...p.arrangement.map(a => a.id), ...p.sources.map(s => s.id), ...p.tracks.flatMap(t => [...(t.effects ?? []).map(e => e.id), ...(t.modulation ?? []).map(m => m.id)]), ...(p.patches ?? []).map(p => p.id)], "identity");
+  for (const patch of p.patches ?? []) validateValues(definition(patch.kind, patch.definitionId, patch.version), patch.values);
   unique(p.tracks.map(t => String(t.slot)), "slot");
   unique(p.tracks.filter(t => t.channel !== null).map(t => String(t.channel)), "channel");
   unique(p.sceneOrder, "scene order");
@@ -56,22 +58,43 @@ export function validateProject(value: unknown): ProjectDocument {
   };
   for (const t of p.tracks) {
     ref(t.id, t.activeClipId);
+    if ((t.source?.type === "synth" || t.effects?.length) && t.channel === null) throw new Error("Sound Lab requires a managed channel");
+    if (t.source?.type === "synth") validateValues(definition("instrument", t.source.definitionId, t.source.version), t.source.values);
+    for (const fx of t.effects ?? []) validateValues(definition("effect", fx.definitionId, fx.version), fx.values);
+    unique((t.modulation ?? []).map(m => m.target), "modulation target");
+    for (const m of t.modulation ?? []) if (!targetDefinition(t, m.target)) {
+      const unknown = t.source?.type === "synth" && !definition("instrument", t.source.definitionId, t.source.version) && m.target.startsWith("synth.") || (t.effects ?? []).some(f => !definition("effect", f.definitionId, f.version) && m.target.startsWith("fx." + f.id + "."));
+      if (!unknown) throw new Error("Unsupported modulation target");
+    }
     if (t.channel !== null && t.channel !== t.slot - 1) throw new Error("Managed channels use the existing d1..d12 routes; slot routing remains stable on reorder");
   }
   for (const c of p.clips) {
     ref(c.trackId, c.id);
+    const source = p.tracks.find(t => t.id === c.trackId)!.source;
+    if (source?.type === "synth" && c.kind !== "steps" || source?.type === "code" && c.kind !== "code") throw new Error("Clip does not match track source type");
+    if (c.kind === "steps" && c.notes && c.notes.length !== c.steps.length) throw new Error("One note is required per rhythm step");
     if (c.kind === "steps" && !p.assets.some(a => a.id === c.assetId)) throw new Error("Invalid asset reference");
     if (c.kind === "code" && c.dependencyIds.some(d => !p.dependencies.some(x => x.id === d))) throw new Error("Invalid dependency reference");
     if ((c.kind === "steps" || c.managed) && p.tracks.find(t => t.id === c.trackId)!.channel === null) throw new Error("Managed clips require an available channel (12 maximum)");
   }
   for (const s of p.scenes) for (const [t, c] of Object.entries(s.clips)) ref(t, c);
   for (const a of p.arrangement) if (!p.scenes.some(s => s.id === a.sceneId)) throw new Error("Invalid arrangement scene");
-  for (const a of p.automation) { ref(a.trackId, a.clipId); if (a.clipId && p.clips.find(c => c.id === a.clipId)!.kind !== "steps") throw new Error("Visual automation requires a step clip"); }
+  for (const a of p.automation) { ref(a.trackId, a.clipId); if (a.parameter.startsWith("synth.")) { const t = p.tracks.find(t => t.id === a.trackId)!; if (!targetDefinition(t, a.parameter) && !(t.source?.type === "synth" && !definition("instrument", t.source.definitionId, t.source.version))) throw new Error("Unsupported synth automation target"); } if (a.clipId && p.clips.find(c => c.id === a.clipId)!.kind !== "steps") throw new Error("Visual automation requires a step clip"); }
   unique(p.automation.map(a => a.trackId + ":" + a.clipId + ":" + a.parameter), "automation target");
   return p;
 }
 
 export const editSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("source.set"), trackId: id, source: sourceSchema }).strict(),
+  z.object({ type: z.literal("synth.parameter"), trackId: id, parameter: z.string(), value: finite.min(0).max(1) }).strict(),
+  z.object({ type: z.literal("notes.set"), clipId: id, notes: z.array(finite.int().min(0).max(127)).min(1).max(128), octave: z.number().int().min(-4).max(4) }).strict(),
+  z.object({ type: z.literal("fx.put"), trackId: id, effect: effectSchema }).strict(),
+  z.object({ type: z.literal("fx.remove"), trackId: id, effectId: id }).strict(),
+  z.object({ type: z.literal("fx.order"), trackId: id, ids: z.array(id).max(8) }).strict(),
+  z.object({ type: z.literal("modulation.put"), trackId: id, route: routeSchema }).strict(),
+  z.object({ type: z.literal("modulation.remove"), trackId: id, routeId: id }).strict(),
+  z.object({ type: z.literal("patch.put"), patch: patchSchema }).strict(),
+  z.object({ type: z.literal("patch.load"), trackId: id, effectId: id.optional(), presetId: id }).strict(),
   z.object({ type: z.literal("track.add"), track: trackSchema }).strict(),
   z.object({ type: z.literal("track.delete"), trackId: id }).strict(),
   z.object({ type: z.literal("track.order"), ids: z.array(id).max(16) }).strict(),
@@ -112,6 +135,16 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
   const put = <T extends {id: string}>(xs: T[], x: T) => { const i = xs.findIndex(y => y.id === x.id); if (i < 0) xs.push(clone(x)); else xs[i] = clone(x); };
   const removeClip = (id: string) => { p.clips = p.clips.filter(c => c.id !== id); p.automation = p.automation.filter(a => a.clipId !== id); for (const t of p.tracks) if (t.activeClipId === id) t.activeClipId = null; for (const s of p.scenes) for (const t of Object.keys(s.clips)) if (s.clips[t] === id) s.clips[t] = null; };
   for (const e of edits) switch (e.type) {
+    case "source.set": { const t = track(e.trackId); t.source = clone(e.source); t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("synth.") || !!targetDefinition(t, m.target)); p.automation = p.automation.filter(a => a.trackId !== t.id || !a.parameter.startsWith("synth.") || !!targetDefinition(t, a.parameter)); break; }
+    case "synth.parameter": { const t = track(e.trackId); if (t.source?.type !== "synth" || !targetDefinition(t, "synth." + e.parameter)) throw new Error("Unsupported synth parameter"); t.source.values[e.parameter] = e.value; delete t.source.presetId; break; }
+    case "notes.set": { const c = steps(e.clipId); c.notes = e.notes; c.octave = e.octave; break; }
+    case "fx.put": { const t = track(e.trackId); const old = t.effects?.find(f => f.id === e.effect.id); if (old && (old.definitionId !== e.effect.definitionId || old.version !== e.effect.version)) throw new Error("Effect instance identity is stable"); t.effects ??= []; put(t.effects, e.effect); break; }
+    case "fx.remove": { const t = track(e.trackId); if (!t.effects?.some(f => f.id === e.effectId)) throw new Error("Unknown effect"); t.effects = t.effects.filter(f => f.id !== e.effectId); t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("fx." + e.effectId + ".")); break; }
+    case "fx.order": { const t = track(e.trackId), fx = t.effects ?? []; if (e.ids.length !== fx.length || new Set(e.ids).size !== fx.length || e.ids.some(id => !fx.some(f => f.id === id))) throw new Error("Effect order must be a permutation"); t.effects = e.ids.map(id => fx.find(f => f.id === id)!); break; }
+    case "modulation.put": { const t = track(e.trackId); if (!targetDefinition(t, e.route.target)) throw new Error("Unsupported modulation target"); t.modulation ??= []; put(t.modulation, e.route); break; }
+    case "modulation.remove": { const t = track(e.trackId); t.modulation = (t.modulation ?? []).filter(m => m.id !== e.routeId); break; }
+    case "patch.put": p.patches ??= []; put(p.patches, e.patch); break;
+    case "patch.load": { const t = track(e.trackId), target = e.effectId ? t.effects?.find(f => f.id === e.effectId) : t.source?.type === "synth" ? t.source : undefined; if (!target) throw new Error("No compatible patch target"); const kind = e.effectId ? "effect" : "instrument", d = definition(kind, target.definitionId, target.version); const user = p.patches?.find(p => p.id === e.presetId && p.kind === kind && p.definitionId === target.definitionId && p.version === target.version); const preset = user ?? d?.presets.find(p => p.id === e.presetId); if (!d || !preset) throw new Error("Unknown or incompatible patch"); target.values = clone(preset.values); target.presetId = preset.id; break; }
     case "track.add": if (p.tracks.some(t => t.id === e.track.id)) throw new Error("Track already exists"); p.tracks.push(clone(e.track)); break;
     case "track.delete": track(e.trackId); for (const c of p.clips.filter(c => c.trackId === e.trackId)) removeClip(c.id); p.tracks = p.tracks.filter(t => t.id !== e.trackId); p.automation = p.automation.filter(a => a.trackId !== e.trackId); for (const s of p.scenes) delete s.clips[e.trackId]; break;
     case "track.order": if (e.ids.length !== p.tracks.length || new Set(e.ids).size !== e.ids.length) throw new Error("Track order must be a permutation"); p.tracks = e.ids.map(track); break;
@@ -119,8 +152,8 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
     case "clip.put": { const old = p.clips.find(c => c.id === e.clip.id); if (old && old.trackId !== e.clip.trackId) throw new Error("Clip ownership is stable"); put(p.clips, e.clip); break; }
     case "clip.delete": if (!p.clips.some(c => c.id === e.clipId)) throw new Error("Unknown clip"); removeClip(e.clipId); break;
     case "clip.activate": track(e.trackId).activeClipId = e.clipId; break;
-    case "steps.set": steps(e.clipId).steps = e.steps; break;
-    case "sound.set": steps(e.clipId).assetId = e.assetId; break;
+    case "steps.set": { const c = steps(e.clipId); c.steps = e.steps; if (c.notes) c.notes = e.steps.map((_, i) => c.notes![i] ?? 36); break; }
+    case "sound.set": { const c = steps(e.clipId), t = track(c.trackId); c.assetId = e.assetId; if (t.source?.type === "synth") { t.source = { type: "sample" }; t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("synth.")); p.automation = p.automation.filter(a => a.trackId !== t.id || !a.parameter.startsWith("synth.")); } break; }
     case "swing.set": steps(e.clipId).swing = e.value; break;
     case "parameter.set": if (e.value === null) delete steps(e.clipId).parameters[e.parameter]; else steps(e.clipId).parameters[e.parameter] = e.value; break;
     case "mixer.set": Object.assign(track(e.trackId).mixer, e.values); break;

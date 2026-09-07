@@ -1,3 +1,4 @@
+import { definition } from "../../src/sound-lab";
 import { useRef, useState } from "react";
 import type { ProjectDocument, Track, Clip, Parameter, ProjectEdit } from "../../src/project";
 import type { StudioState } from "../../src/studio-client";
@@ -64,15 +65,17 @@ function Repeats({ project: p, entryId, index, disabled }: { project: ProjectDoc
 
 const parameters: [Parameter, string][] = [["cutoff", "Tone"], ["room", "Room"], ["pan", "Pan"], ["gain", "Musical gain"], ["shape", "Shape"], ["delay", "Delay"], ["speed", "Speed"], ["legato", "Legato"], ["resonance", "Resonance"], ["size", "Size"], ["crush", "Crush"], ["sustain", "Sustain"]];
 export function MotionEditor({ project: p, track, clip, disabled }: { project: ProjectDocument; track: Track; clip: Clip; disabled: boolean }) {
-  const [parameter, setParameter] = useState<Parameter>("room");
+  const [parameter, setParameter] = useState<string>("room");
   if (clip.kind !== "steps") return null;
+  const choices: [string, string][] = [...parameters, ...(track.source?.type === "synth" ? definition("instrument", track.source.definitionId, track.source.version)?.parameters.map(param => ["synth." + param.id, "Synth · " + param.name] as [string, string]) ?? [] : [])];
+  const target = choices.some(([key]) => key === parameter) ? parameter : "room";
   const lanes = p.automation.filter(a => a.trackId === track.id && (a.clipId === null || a.clipId === clip.id));
-  const add = (values: number[]) => { const existing = lanes.find(a => a.parameter === parameter && a.clipId === clip.id); void client.edit([{ type: "automation.put", automation: { id: existing?.id ?? crypto.randomUUID(), trackId: track.id, clipId: clip.id, parameter, enabled: true, bars: existing?.bars ?? 4, values } }], "Apply automation gesture"); };
+  const add = (values: number[]) => { const existing = lanes.find(a => a.parameter === target && a.clipId === clip.id); void client.edit([{ type: "automation.put", automation: { id: existing?.id ?? crypto.randomUUID(), trackId: track.id, clipId: clip.id, parameter: target, enabled: true, bars: existing?.bars ?? 4, values } }], "Apply automation gesture"); };
   return <details className="inspector-details"><summary>Motion <span>{lanes.filter(a => a.enabled).length} active</span></summary>
     <p>Make a control move with this clip. Stored base values stay available when motion is off. Motion uses stepped values.</p>
-    <label>Control<select aria-label="Motion control" value={parameter} onChange={e => setParameter(e.target.value as Parameter)}>{parameters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    <label>Control<select aria-label="Motion control" value={target} onChange={e => setParameter(e.target.value as Parameter)}>{choices.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="performance-actions"><button disabled={disabled} onClick={() => add([0, 0.2, 0.4, 0.6, 0.8, 1])}>Rise</button><button disabled={disabled} onClick={() => add([1, 0.8, 0.6, 0.4, 0.2, 0])}>Fall</button><button disabled={disabled} onClick={() => add([0, 0.5, 1, 0.5, 0])}>Swell</button></div>
-    {lanes.map(a => <fieldset key={a.id} className="motion-lane"><legend>{parameters.find(([key]) => key === a.parameter)?.[1]} · {a.clipId ? "this clip" : "all visual clips"}</legend>
+    {lanes.map(a => <fieldset key={a.id} className="motion-lane"><legend>{choices.find(([key]) => key === a.parameter)?.[1]} · {a.clipId ? "this clip" : "all visual clips"}</legend>
       {a.clipId === null && lanes.some(b => b.parameter === a.parameter && b.clipId === clip.id && b.enabled) && <p>Overridden by this clip’s motion.</p>}
       <label><input type="checkbox" checked={a.enabled} disabled={disabled} onChange={e => void client.edit([{ type: "automation.put", automation: { ...a, enabled: e.target.checked } }], "Toggle automation")} /> Active</label>
       <Range label={`${a.parameter} motion cycles`} value={a.bars} min={1} max={64} step={1} disabled={disabled} onCommit={(bars, base) => void client.edit([{ type: "automation.put", automation: { ...a, bars } }], "Automation duration", base)} />

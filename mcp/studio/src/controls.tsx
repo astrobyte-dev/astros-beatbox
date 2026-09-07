@@ -252,3 +252,31 @@ export function ClockStrip({ playing }: { playing: boolean }) {
     </div>
   );
 }
+
+// Pointer draft is disposable; one release/keyboard gesture submits one intention.
+// Pointer capture, Escape and cancel keep adjustments accessible and reversible.
+export function Knob({ label, value, defaultValue, disabled, modulated, automated, onCommit }: {
+  label: string; value: number; defaultValue: number; disabled?: boolean; modulated?: boolean; automated?: boolean;
+  onCommit: (value: number, base: EditBase) => void;
+}) {
+  const [draft, setDraft] = useState<number | null>(null);
+  const held = useRef<{ base: EditBase; start: number; y: number; value: number } | null>(null);
+  const begin = (y = 0) => { held.current ??= { base: client.base(), start: value, y, value }; };
+  const update = (v: number) => { const next = Math.round(Math.max(0, Math.min(1, v)) * 1000) / 1000; held.current!.value = next; setDraft(next); };
+  const finish = () => { const g = held.current; held.current = null; setDraft(null); if (g && (g.value !== value || g.base.revision !== client.base().revision)) onCommit(g.value, g.base); };
+  const cancel = () => { held.current = null; setDraft(null); };
+  const v = draft ?? value;
+  return <div className={`knob-control ${modulated ? "has-modulation" : ""} ${automated ? "has-automation" : ""}`}>
+    <span className="knob-label">{label}</span>
+    <div className="knob-dial" role="slider" tabIndex={disabled ? -1 : 0} aria-disabled={disabled} aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v * 100)} aria-valuetext={`${Math.round(v * 100)} percent${modulated ? ", modulated" : ""}${automated ? ", automated" : ""}`}
+      onPointerDown={e => { if (disabled || e.button !== 0) return; e.preventDefault(); e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId); begin(e.clientY); }}
+      onPointerMove={e => { const g = held.current; if (disabled || !g || !e.currentTarget.hasPointerCapture(e.pointerId)) return; update(g.start + (g.y - e.clientY) / (e.shiftKey ? 1800 : 180)); }}
+      onPointerUp={finish} onPointerCancel={cancel} onLostPointerCapture={cancel} onBlur={finish}
+      onKeyDown={e => { if (disabled) return; if (e.key === "Escape") { cancel(); return; } if (!["ArrowUp","ArrowRight","ArrowDown","ArrowLeft","Home","End"].includes(e.key)) return; e.preventDefault(); begin(); update(e.key === "Home" ? 0 : e.key === "End" ? 1 : held.current!.value + (["ArrowUp","ArrowRight"].includes(e.key) ? 1 : -1) * (e.shiftKey ? .001 : .01)); }} onKeyUp={e => { if (e.key !== "Escape") finish(); }}>
+      <svg viewBox="0 0 100 100" aria-hidden="true"><circle className="knob-track" cx="50" cy="50" r="42" /><circle className="knob-arc" cx="50" cy="50" r="42" strokeDasharray={`${v * 198} 264`} transform="rotate(135 50 50)" /><circle className="knob-cap" cx="50" cy="50" r="32" /><path className="knob-pointer" d="M50 26v13" transform={`rotate(${-135 + v * 270} 50 50)`} /></svg>
+    </div>
+    <output>{Math.round(v * 100)}<small>%</small></output>
+    <button className="knob-reset" aria-label={`Reset ${label}`} disabled={disabled} onClick={() => onCommit(defaultValue, client.base())}>Reset</button>
+    {(modulated || automated) && <small className="knob-motion">{modulated ? "↝ Modulated" : "◷ Automated"}</small>}
+  </div>;
+}

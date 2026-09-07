@@ -1,3 +1,4 @@
+import { SOUND_LAB_SYNTHS } from "./sound-lab-engine.js";
 import dgram from "node:dgram";
 import { EventEmitter } from "node:events";
 import type { DriverFault } from "./proc.js";
@@ -125,7 +126,7 @@ export class Engine extends EventEmitter {
   // Master safety limiter + a master level meter that forwards L/R to the
   // dashboard over UDP. Both sit at the root tail (after all SuperDirt orbits).
   private async installChannels(): Promise<void> {
-    await this.sclang.evalRoutine(CHANNEL_SYNTH + ` s.sync; ~abxBuses = Array.fill(12, { Bus.audio(s, 2) }); ~dirt.orbits.do { |o, i| o.outBus = ~abxBuses[i].index }; s.sync; ~abxChannels = ~abxBuses.collect { |b| Synth.tail(RootNode(s), \\abxChannel, [\\inBus, b.index]) }; s.sync;`, "install-channels", 15000);
+    await this.sclang.evalRoutine(CHANNEL_SYNTH + SOUND_LAB_SYNTHS + ` s.sync; ~abxFX = Dictionary.new; ~abxBuses = Array.fill(12, { Bus.audio(s, 2) }); ~dirt.orbits.do { |o, i| o.outBus = ~abxBuses[i].index }; s.sync; ~abxChannels = ~abxBuses.collect { |b| Synth.tail(RootNode(s), \\abxChannel, [\\inBus, b.index]) }; s.sync;`, "install-channels", 15000);
   }
 
   private async installMaster(): Promise<void> {
