@@ -148,3 +148,18 @@ Outfit and DM Sans are bundled locally, with no font CDN dependency.
 4. Describe what you changed and how you verified it.
 
 Issues and ideas welcome too — open one on GitHub.
+
+## Sound Lab — P3.5A
+
+`src/sound-lab.ts` owns shared definitions and schemas; `sound-lab-edits.ts` creates
+an add-instrument intention; `sound-lab-engine.ts` emits SC SynthDefs and persistent
+insert reconciliation. The canonical project owns source/notes/FX/modulation and
+patches. Studio's `SoundLab.tsx` and reusable `Knob` only keep interaction drafts.
+SC owns continuous modulation. Do not send modulation through browser timers.
+
+Run `npm run selftest:p35` alongside the existing full suite, both typechecks,
+browser and runtime regressions. New source-contract tests cannot prove native
+SC/Tidal compilation, sound quality or node lifetime. Preserve the pending gates
+and documented limitations in [the P3.5A report](docs/p35-sound-lab-core.md).
+SC binary operators share precedence: parenthesize modulation and dry/wet products.
+String membership uses `includesEqual`, not identity-based `includes`.

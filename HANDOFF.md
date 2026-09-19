@@ -2,13 +2,21 @@
 
 Updated 2026-09-07 (Australia/Hobart). **P2.5 is complete and accepted.**
 Current portability task: **P2.6, Level B validated on Ubuntu; Windows gate pending**.
-Active feature work: **P3 — Composition & Performance**, approved in
-[tasks/TASK-3.md](tasks/TASK-3.md). It is intentionally stacked on P2.6 in
-`feat/p3-composition-performance`, based on `be2e73011bccbb19b6a2203ed1aabcd4f14ea186`.
-See [P3 implementation and validation limits](docs/p3-composition-performance.md).
-Native P3 audio acceptance remains pending. Do not begin P3.5/P4/P5.
-P2.6 remains draft PR #4, unmerged; its Windows gate is unchanged. Any P3 PR
-must remain draft and target `feat/p2.6-ubuntu-portability` until P2.6 is merged.
+Active feature work: **P3.5A — Sound Lab Core**, on
+`feat/p3.5a-sound-lab-core`, based on exact P3 head
+`7f5971ab603c33f893071839c5880b57ed8569f1`.
+See [the Sound Lab implementation and completion report](docs/p35-sound-lab-core.md)
+and [TASK-3.5A](tasks/TASK-3.5A.md). Initial implementation and portable validation
+are complete, including P3 semantic automation for 14 insert FX controls with
+independent base/modulation ownership. Additional validation: 256 passed, 3 Windows
+skips (259 total), P3/P3.5A browser journeys and real MCP synchronization. Native
+synthesis/audio/CPU/timing acceptance remains pending.
+The P3.5A draft targets `feat/p3-composition-performance`, not main.
+P3 remains implementation complete with native audio/timing acceptance pending;
+see [P3 report](docs/p3-composition-performance.md). P2.6 and P3 remain unmerged
+draft dependencies. P2.6 remains Ubuntu Runtime Safe with Windows revalidation
+pending. No native or Windows gate was closed. Do not begin P3.5B/P4/P5 or merge
+any of these stacked drafts as part of Sound Lab delivery.
 
 ## Checkpoint
 

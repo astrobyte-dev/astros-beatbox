@@ -13,7 +13,8 @@ A free musical playground for Windows. **Play with sound.** Start a groove, chan
 
 P2.5 is complete. See [HANDOFF.md](HANDOFF.md) for the accepted checkpoint,
 Windows laptop setup and next-task boundary. [P2.6 portability](tasks/TASK-2.6.md)
-is the current task; its native-audio and Windows gates remain open. P3 has not started.
+is the portability base; its native-audio and Windows gates remain open. P3 and
+P3.5A implementation are stacked on that base with native acceptance still pending.
 
 ## Screenshots
 
@@ -226,3 +227,15 @@ arrangements, canonical motion controls and managed-code drafts. See the
 editing/playback boundaries and validation. Native audio timing and Windows
 acceptance remain pending. P2.6 remains Level B — Ubuntu Runtime Safe, draft PR #4,
 unmerged; this work does not close its Windows gate or begin Sound Lab.
+
+## Sound Lab development — P3.5A
+
+Studio's **Synths** collection adds Dirty Mono, 808 Sub, Reese, Prism and Static
+Bloom. Select a track to edit notes, shape its instrument, build a serial FX rack
+and add engine-owned motion. Knobs support drag, fine adjustment, keyboard and
+reset. Patches, effects and motion are part of your saved jam and Undo history.
+
+See [Sound Lab architecture, validation and limitations](docs/p35-sound-lab-core.md).
+`npm run selftest:p35` validates the production Studio and real MCP/project paths
+with a deterministic audio fixture. Native synth/FX audio, CPU and Windows
+acceptance remain pending; do not infer them from the portable suite or CI.
