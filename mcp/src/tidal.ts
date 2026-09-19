@@ -27,11 +27,18 @@ export class Tidal extends ProcDriver {
   /** Wait until BootTidal.hs has finished loading (tidal> prompt). */
   async waitConnected(timeoutMs = 90000): Promise<void> {
     await this.waitFor(TIDAL_READY, timeoutMs);
+    await this.eval("do { abxPrepare silence; _ <- getnow; pure () }", "p3-ready", timeoutMs);
   }
 
   /** Evaluate Tidal code (single or multi-line). */
   eval(code: string, operationId?: string, timeoutMs?: number) {
     return this.execute((token) => tidalFrame(code, token), operationId, timeoutMs);
+  }
+
+  async clock(): Promise<number> {
+    const result = await this.eval('do { now <- getnow; putStrLn ("ABX_CLOCK " ++ show (fromRational now :: Double)) }');
+    const { parseCycle } = await import("./performance.js");
+    return parseCycle(result.output, "ABX_CLOCK");
   }
 
   hush(operationId?: string) {

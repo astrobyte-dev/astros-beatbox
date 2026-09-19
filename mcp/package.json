@@ -15,6 +15,7 @@
     "selftest:browser": "npm run build && node browser-selftest.mjs",
     "selftest:studio": "npm run build && node studio-selftest.mjs",
     "selftest:studio:live": "npm run build && node studio-live-selftest.mjs",
+    "selftest:p3": "npm run build && node p3-selftest.mjs",
     "selftest:p2": "npm run build && node p2-selftest.mjs",
     "selftest:p2:live": "npm run build && node p2-selftest.mjs --live",
     "selftest:runtime:live": "npm run build && node runtime-live-selftest.mjs",

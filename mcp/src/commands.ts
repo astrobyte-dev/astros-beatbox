@@ -16,6 +16,9 @@ const bare = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd) }).strict(
 const layer = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd), slot }).strict();
 export const commandSchema = z.union([
   bare("boot"),
+  z.object({ ...meta, cmd: z.literal("scene.launch"), projectId: z.string(), revision: z.number().int().nonnegative(), sceneId: z.string(), boundary: z.enum(["immediate", "cycle"]).default("cycle"), repeat: z.boolean().optional() }).strict(),
+  z.object({ ...meta, cmd: z.literal("code.apply"), projectId: z.string(), revision: z.number().int().nonnegative(), clipId: z.string() }).strict(),
+  z.object({ ...meta, cmd: z.literal("performance.return"), projectId: z.string(), revision: z.number().int().nonnegative() }).strict(),
   bare("preview.stop"), bare("record.start"),
   ...["audio.stop", "audio.restart", "runtime.restart", "runtime.quit"].map(bare),
   z.object({ ...meta, cmd: z.literal("preview.play"), value: z.string().min(1).max(1024) }).strict(),
@@ -36,7 +39,7 @@ export const commandSchema = z.union([
   z.object({ ...meta, cmd: z.literal("setdevice"), value: z.string().max(512).refine((s) => !/[\r\n\0]/.test(s)) }).strict(),
 ]);
 // A compact wire type; runtime validation above narrows each command's fields.
-export interface Command { cmd: string; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
+export interface Command { cmd: string; sceneId?: string; boundary?: "immediate" | "cycle"; repeat?: boolean; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
 export type CommandResult = {
   operationId: string; sessionId: string; generation: number;
   projectId?: string; revision?: number; project?: ProjectDocument; history?: { undo: number; redo: number };
@@ -59,5 +62,5 @@ export function validateCommand(input: unknown): Command {
 // Adapters require explicit optimistic concurrency for every external operation
 // that can target music. Runtime-only Stop/record/reset keep the P0a wire contract.
 export function requiresProjectRevision(cmd: string): boolean {
-  return cmd === "sound.replace" || ["eval", "eval_sc", "hush", "silence", "tempo", "set", "mute", "unmute", "solo", "unsolo", "load", "save", "resume"].includes(cmd) || cmd.startsWith("project.") || cmd.startsWith("song.");
+  return cmd === "scene.launch" || cmd === "code.apply" || cmd === "performance.return" || cmd === "sound.replace" || ["eval", "eval_sc", "hush", "silence", "tempo", "set", "mute", "unmute", "solo", "unsolo", "load", "save", "resume"].includes(cmd) || cmd.startsWith("project.") || cmd.startsWith("song.");
 }

@@ -17,6 +17,7 @@ import {
 import { ClockStrip, EditableText, Icon, Range } from "./controls";
 import { TrackLane } from "./TrackLane";
 import { SoundLibrary } from "./SoundLibrary";
+import { Composition, MotionEditor, CodeEditor, addCodeTrack } from "./Composition";
 import { Recordings } from "./Recordings";
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
   } | null>(null);
   const [library, setLibrary] = useState("Grooves"),
     [mixer, setMixer] = useState(false);
+  const [performing, setPerforming] = useState(false);
   const [files, setFiles] = useState<string[]>([]),
     [fileError, setFileError] = useState("");
   const [dialog, setDialog] = useState<"save" | "new" | null>(null);
@@ -181,7 +183,7 @@ export function App() {
   const hasMusic =
     p.tracks.length > 0 || p.clips.length > 0 || p.arrangement.length > 0;
   return (
-    <div className="studio-app" data-revision={p.revision} data-project={p.id}>
+    <div className={`studio-app ${performing ? "performance-view" : ""}`} data-revision={p.revision} data-project={p.id}>
       <a className="skip-link" href="#workspace">
         Skip to instruments
       </a>
@@ -444,7 +446,7 @@ export function App() {
                 disabled={disabled}
                 onClick={() =>
                   void client.command(
-                    { cmd: "song.stop" },
+                    { cmd: "performance.return" },
                     "Play active instruments",
                   )
                 }
@@ -477,6 +479,8 @@ export function App() {
               </a>
             </div>
           )}
+          {state.projectRuntime.externallyModified && <div className="notice" role="alert">Externally modified · this project does not fully describe current playback. Authored edits are kept without replacing external music. <button disabled={disabled} onClick={() => void client.command({ cmd: "performance.return" }, "Return to managed project")}>Return to managed project</button></div>}
+          {p.tracks.length > 0 && <Composition state={state} disabled={disabled} performing={performing} onPerform={() => { setPerforming(!performing); setMixer(!performing); }} />}
           {p.tracks.length ? (
             <>
               <div className="rhythm-guide">
@@ -598,6 +602,7 @@ export function App() {
                   ))}
                 </div>
               )}
+              {!performing && <button disabled={disabled} onClick={() => { try { void client.edit(addCodeTrack(p, state.workspace.selectedSceneId ?? p.sceneOrder[0]), "Add managed code instrument"); } catch (e) { client.report(String(e)); } }}>+ Code instrument</button>}
               <div className="workspace-tip">
                 <span>↳</span>
                 <p>
@@ -651,6 +656,7 @@ export function App() {
           </div>
         </main>
         <aside
+          hidden={performing}
           className={`inspector ${track ? accent(track.slot) : ""}`}
           aria-label="Instrument inspector"
         >
@@ -777,10 +783,6 @@ function Inspector({
     name = trackName(track.name, track.slot);
   const index = visual ? Math.min(step, visual.steps.length - 1) : 0;
   const assetStatus = sound && state.assets.find((a) => a.id === sound.id);
-  const motion = p.automation.filter(
-    (a) =>
-      a.trackId === track.id && (a.clipId === null || a.clipId === clip?.id),
-  );
   return (
     <>
       <div className="inspector-heading">
@@ -907,29 +909,10 @@ function Inspector({
       ) : (
         <p className="code-explanation">
           This instrument uses custom code. Its musical expression is preserved.
-          Continue editing it in the classic dashboard.
         </p>
       )}
-      <details className="inspector-details">
-        <summary>
-          Motion{" "}
-          <span>
-            {motion.filter((a) => a.enabled).length
-              ? `${motion.filter((a) => a.enabled).length} active`
-              : "Explore later"}
-          </span>
-        </summary>
-        <p>
-          {motion.length
-            ? "Existing motion is preserved. Edit its curves in the classic dashboard."
-            : "Motion adds changes over time. More ways to explore it are coming later."}
-        </p>
-        {motion.map((a) => (
-          <p key={a.id}>
-            {a.parameter} · {a.enabled ? "on" : "off"}
-          </p>
-        ))}
-      </details>
+      {clip && <MotionEditor project={p} track={track} clip={clip} disabled={disabled} />}
+      {clip?.kind === "code" && <CodeEditor key={clip.id + ":" + (clip.draft ?? clip.source)} project={p} clip={clip} disabled={disabled} />}
       <details className="inspector-details code-details">
         <summary>
           Peek at the code <span>↗</span>

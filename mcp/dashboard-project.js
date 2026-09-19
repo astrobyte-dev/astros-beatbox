@@ -34,7 +34,7 @@
   function loadFiles(){ return fetch('/projects').then(function(r){return r.json();}).then(function(files){ var sel=document.getElementById('projectSelect'); if(!sel)return; var v=sel.value; sel.innerHTML='<option value="">— saved projects —</option>'+files.map(function(f){return '<option value="'+Abx.esc(f)+'">'+Abx.esc(f)+'</option>';}).join(''); sel.value=v; }); }
   function render(){ var st=Abx.state(),p=st.project;if(!p)return;
     var u=document.getElementById('undoBtn'),r=document.getElementById('redoBtn'); if(u)u.disabled=!st.history||!st.history.undo; if(r)r.disabled=!st.history||!st.history.redo;
-    var label=document.getElementById('projectState'); if(label)label.textContent=p.name+' · r'+p.revision+(st.workspace&&st.workspace.recovered?' · recovered, stopped':'');
+    var label=document.getElementById('projectState'); if(label)label.textContent=p.name+' · r'+p.revision+(st.projectRuntime&&st.projectRuntime.externallyModified?' · Externally modified':'')+(st.projectRuntime&&st.projectRuntime.performance&&st.projectRuntime.performance.mode!=='manual'?' · Performance active in Studio':'')+(st.workspace&&st.workspace.recovered?' · recovered, stopped':'');
     var missing=(st.assets||[]).filter(function(a){return a.status==='missing';}),el=document.getElementById('missingAssets'); if(el)el.textContent=(missing.length?'Missing assets: '+missing.map(function(a){return a.reference;}).join(', '):'')+(st.workspace&&st.workspace.recoveryWarning?' '+st.workspace.recoveryWarning:'');
   }
   document.addEventListener('pointerdown',function(e){ if(e.target.type==='range'){group=crypto.randomUUID();var p=project();groupBase=p&&{id:p.id,revision:p.revision};} });

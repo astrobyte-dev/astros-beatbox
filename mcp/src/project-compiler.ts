@@ -13,10 +13,11 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
   let body = 's "' + c.steps.map(v => v > 0 ? sound : "~").join(" ") + '"';
   // Velocity stays multiplicative, even when gain has a musical automation lane.
   body += ' # gain "' + c.steps.map(number).join(" ") + '"';
+  const automation = p.automation.filter(a => a.enabled && a.trackId === c.trackId && (a.clipId === null || a.clipId === c.id));
   for (const key of Object.keys(c.parameters).sort() as (keyof typeof c.parameters)[]) {
+    if (automation.some(a => a.parameter === key)) continue;
     body += (key === "gain" ? " |* gain " : ` # ${key} `) + number(c.parameters[key]!);
   }
-  const automation = p.automation.filter(a => a.enabled && a.trackId === c.trackId && (a.clipId === null || a.clipId === c.id));
   for (const a of automation.filter(a => a.clipId !== null || !automation.some(b => b.clipId === c.id && b.parameter === a.parameter)).sort((a, b) => a.parameter.localeCompare(b.parameter))) {
     body += (a.parameter === "gain" ? " |* gain " : ` # ${a.parameter} `) + curve(a);
   }
@@ -27,7 +28,7 @@ export function compileTrack(p: ProjectDocument, t: Track, clipId = t.activeClip
   if (!c) return null;
   const body = compileClip(p, c);
   // Routing is an outer projection, separate from the opaque source expression.
-  return c.kind === "steps" || c.managed ? `(${body}) # orbit ${t.channel}` : body;
+  return c.kind === "steps" || c.managed ? `(${body}${c.kind === "code" ? "\n" : ""}) # orbit ${t.channel}` : body;
 }
 export function projectSlots(p: ProjectDocument): Record<string, string> {
   return Object.fromEntries(p.tracks.flatMap(t => { const body = compileTrack(p, t); return body === null ? [] : [["d" + t.slot, body]]; }));

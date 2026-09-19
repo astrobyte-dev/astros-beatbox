@@ -2,9 +2,13 @@
 
 Updated 2026-09-07 (Australia/Hobart). **P2.5 is complete and accepted.**
 Current portability task: **P2.6, Level B validated on Ubuntu; Windows gate pending**.
-Next feature phase: **P3, not started**. Do not begin it without an agreed task scope.
-The repository has no approved `tasks/TASK-3.md`; earlier reports identify P3
-only as the next phase. Do not infer a specification from roadmap hints.
+Active feature work: **P3 — Composition & Performance**, approved in
+[tasks/TASK-3.md](tasks/TASK-3.md). It is intentionally stacked on P2.6 in
+`feat/p3-composition-performance`, based on `be2e73011bccbb19b6a2203ed1aabcd4f14ea186`.
+See [P3 implementation and validation limits](docs/p3-composition-performance.md).
+Native P3 audio acceptance remains pending. Do not begin P3.5/P4/P5.
+P2.6 remains draft PR #4, unmerged; its Windows gate is unchanged. Any P3 PR
+must remain draft and target `feat/p2.6-ubuntu-portability` until P2.6 is merged.
 
 ## Checkpoint
 
@@ -119,4 +123,6 @@ Windows acceptance screenshots with regenerated Linux captures.
 
 The missing TASK-2.4 reference belonged to the pasted migration handoff; no
 repository reference/history establishes that file. It was not reconstructed.
-P3 has not begun and has no approved task specification.
+Historical milestone reports retain their original scope statements. The current
+approved P3 scope and implementation status are linked above; no native or Windows
+acceptance has been inferred from portable tests.

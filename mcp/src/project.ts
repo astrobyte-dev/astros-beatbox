@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 
 export const CHANNELS = 12;
@@ -15,7 +15,7 @@ const assetSchema = z.object({ id, kind: z.enum(["sample", "synth", "file"]), re
 const clipBase = { id, trackId: id, name: z.string().max(120) };
 export const clipSchema = z.discriminatedUnion("kind", [
   z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), parameters: params }).strict(),
-  z.object({ ...clipBase, kind: z.literal("code"), source: z.string().min(1).max(65536), managed: z.boolean(), dependencyIds: z.array(id).max(128) }).strict(),
+  z.object({ ...clipBase, kind: z.literal("code"), source: z.string().min(1).max(65536), managed: z.boolean(), draft: z.string().max(65536).optional(), dependencyIds: z.array(id).max(128) }).strict(),
 ]);
 export const automationSchema = z.object({ id, trackId: id, clipId: id.nullable(), parameter: parameterSchema, enabled: z.boolean(), bars: z.number().int().min(1).max(64), values: z.array(finite.min(0).max(1)).min(2).max(128) }).strict();
 export const trackSchema = z.object({ id, name: z.string().max(120), slot: z.number().int().min(1).max(16), channel: z.number().int().min(0).max(CHANNELS - 1).nullable(), activeClipId: id.nullable(), mixer: mixerSchema }).strict();
@@ -25,7 +25,7 @@ const documentSchema = z.object({
   schemaVersion: z.literal(1), id, revision: z.number().int().nonnegative().safe(), name: z.string().max(120),
   tempo: z.object({ bpm: finite.positive().max(1000), beatsPerCycle: finite.positive().max(32) }).strict(),
   tracks: z.array(trackSchema).max(16), clips: z.array(clipSchema).max(1024), scenes: z.array(sceneSchema).min(1).max(128), sceneOrder: z.array(id).min(1).max(128),
-  arrangement: arrangementSchema, assets: z.array(assetSchema).max(2048), automation: z.array(automationSchema).max(2048),
+  arrangement: arrangementSchema, arrangementLoop: z.boolean().optional(), assets: z.array(assetSchema).max(2048), automation: z.array(automationSchema).max(2048),
   dependencies: z.array(z.object({ id, kind: z.enum(["tidal", "supercollider", "sample-library"]), name: z.string().min(1).max(200), version: z.string().max(100), source: z.string().max(65536) }).strict()).max(128),
   // Source artifacts are retained verbatim, never replayed as a recovery log.
   sources: z.array(z.object({ id, name: z.string().max(120), source: z.string().max(65536) }).strict()).max(128),
@@ -86,6 +86,12 @@ export const editSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("mixer.set"), trackId: id, values: mixerSchema.partial().strict() }).strict(),
   z.object({ type: z.literal("asset.put"), asset: assetSchema }).strict(),
   z.object({ type: z.literal("scene.put"), scene: sceneSchema }).strict(),
+  z.object({ type: z.literal("scene.create"), sceneId: id, name: z.string().min(1).max(120) }).strict(),
+  z.object({ type: z.literal("scene.rename"), sceneId: id, name: z.string().min(1).max(120) }).strict(),
+  z.object({ type: z.literal("scene.duplicate"), sceneId: id, newSceneId: id, name: z.string().min(1).max(120) }).strict(),
+  z.object({ type: z.literal("scene.silence"), sceneId: id, trackId: id }).strict(),
+  z.object({ type: z.literal("arrangement.loop"), enabled: z.boolean() }).strict(),
+  z.object({ type: z.literal("code.draft"), clipId: id, source: z.string().max(65536) }).strict(),
   z.object({ type: z.literal("scene.delete"), sceneId: id }).strict(),
   z.object({ type: z.literal("scene.order"), ids: z.array(id).max(128) }).strict(),
   z.object({ type: z.literal("scene.capture"), sceneId: id }).strict(),
@@ -120,6 +126,24 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
     case "mixer.set": Object.assign(track(e.trackId).mixer, e.values); break;
     case "asset.put": { const old = p.assets.find(a => a.id === e.asset.id); if (old && JSON.stringify(old) !== JSON.stringify(e.asset)) throw new Error("Asset identities are immutable; add a new asset and replace the intended clip reference"); put(p.assets, e.asset); break; }
     case "scene.put": if (!p.scenes.some(s => s.id === e.scene.id)) p.sceneOrder.push(e.scene.id); put(p.scenes, e.scene); break;
+    case "scene.create": if (p.scenes.some(s => s.id === e.sceneId)) throw new Error("Scene already exists"); p.scenes.push({ id: e.sceneId, name: e.name, clips: Object.fromEntries(p.tracks.map(t => [t.id, null])) }); p.sceneOrder.push(e.sceneId); break;
+    case "scene.rename": scene(e.sceneId).name = e.name; break;
+    case "scene.silence": track(e.trackId); scene(e.sceneId).clips[e.trackId] = null; break;
+    case "scene.duplicate": {
+      const source = scene(e.sceneId);
+      if (p.scenes.some(s => s.id === e.newSceneId)) throw new Error("Scene already exists");
+      const copiedId = (id: string) => "copy_" + createHash("sha256").update(e.newSceneId + ":" + id).digest("hex");
+      const refs: Record<string, string | null> = {};
+      for (const t of p.tracks) {
+        const original = p.clips.find(c => c.id === source.clips[t.id]);
+        if (!original) { refs[t.id] = null; continue; }
+        const copy = clone(original); copy.id = copiedId(original.id); copy.name = e.name; p.clips.push(copy); refs[t.id] = copy.id;
+        for (const a of p.automation.filter(a => a.clipId === original.id)) p.automation.push({ ...clone(a), id: copiedId(a.id), clipId: copy.id });
+      }
+      p.scenes.push({ id: e.newSceneId, name: e.name, clips: refs }); p.sceneOrder.splice(p.sceneOrder.indexOf(e.sceneId) + 1, 0, e.newSceneId); break;
+    }
+    case "arrangement.loop": p.arrangementLoop = e.enabled; break;
+    case "code.draft": { const c = p.clips.find(c => c.id === e.clipId); if (!c || c.kind !== "code" || !c.managed) throw new Error("Select a managed code clip"); c.draft = e.source; break; }
     case "scene.delete": scene(e.sceneId); p.scenes = p.scenes.filter(s => s.id !== e.sceneId); p.sceneOrder = p.sceneOrder.filter(s => s !== e.sceneId); p.arrangement = p.arrangement.filter(a => a.sceneId !== e.sceneId); break;
     case "scene.order": p.sceneOrder = e.ids; break;
     case "scene.capture": scene(e.sceneId).clips = Object.fromEntries(p.tracks.map(t => [t.id, t.activeClipId])); break;

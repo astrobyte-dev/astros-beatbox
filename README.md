@@ -217,3 +217,12 @@ samples remain identified and are silenced rather than substituted.
 
 Read [the P0b architecture, compatibility and validation report](docs/p0b-project-model.md)
 for the schema, edit API, recovery limits, routing and exit criteria. That report records the completed P0b milestone; the current `/studio` extends it.
+
+## P3 composition development
+
+The stacked P3 branch adds Studio scenes, engine-clocked performance, scene
+arrangements, canonical motion controls and managed-code drafts. See the
+[P3 implementation report](docs/p3-composition-performance.md) for commands,
+editing/playback boundaries and validation. Native audio timing and Windows
+acceptance remain pending. P2.6 remains Level B — Ubuntu Runtime Safe, draft PR #4,
+unmerged; this work does not close its Windows gate or begin Sound Lab.
