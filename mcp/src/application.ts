@@ -1,3 +1,10 @@
+import { addSynth } from "./sound-lab-edits.js";
+import { defaults, definition } from "./sound-lab.js";
+import { ExplorationTrail } from "./project-service.js";
+import { makeVariation, applyVerb, suggestedMacros, promoteJam, type JamSummary } from "./jam.js";
+import { jamCapabilities, verbs, locked, macroOffset, semanticTargets, type PerformanceTake } from "./jam-model.js";
+import { pocketGroove } from "./studio-starter.js";
+import { validateProject, applyEdits } from "./project.js";
 import { UserAudioLibrary } from "./user-audio.js";
 import { Capture, type InputConfiguration } from "./capture.js";
 import { ManagedAudioBuffers, isUserAudio } from "./sampling-engine.js";
@@ -46,6 +53,10 @@ export class Application {
   static readonly RETRY_MS = 5 * 60 * 1000;
 
   readonly project: ProjectService;
+  readonly jamTrail = new ExplorationTrail();
+  private jamSummary: JamSummary | null = null;
+  private jamSummaryRevision: number | null = null;
+  private jamTake: { active: boolean; projectId: string; generation: number; take: PerformanceTake } | null = null;
   readonly recordings: RecordingCatalog;
   readonly preview: Preview;
   readonly userAudio: UserAudioLibrary;
@@ -79,12 +90,14 @@ export class Application {
     if (this.project.workspace.recovered) { this.projectRig(); this.rig.stopped = true; this.rig.paused = true; }
   }
   projectState() {
+    const document = this.project.document;
     if (this.performanceDocument && (!this.engine.running || this.performanceGeneration !== this.engine.generation || this.engine.state === "degraded" || this.engine.state === "error")) this.performance.clock = "unavailable";
     if (this.rig.recording && (!this.engine.running || this.recordingGeneration !== this.engine.generation) && this.recordingId) {
       this.recordings.fail(this.recordingId, "Audio engine ended before this take could be finalized.", "interrupted");
       this.rig.recording = false;
     }
-    return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.assetStates(), capture: this.capture.snapshot(), input: { configuration: this.engine.inputConfiguration ?? null, devices: this.engine.inputDevices ?? [], enumeration: !!this.engine.audioCapabilities?.deviceSelection, explanation: this.engine.audioCapabilities?.configuration ?? "Input device enumeration unavailable in this backend" }, preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
+    if (this.jamTake?.active && this.jamTake.generation !== this.engine.generation) this.jamTake.active = false;
+    return { jam: { capture: this.jamTake ? clone(this.jamTake) : null, trail: this.jamTrail.inspect(document), summary: this.jamSummaryRevision === document.revision ? this.jamSummary : null, capabilities: jamCapabilities(document), verbs }, project: document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.assetStates(), capture: this.capture.snapshot(), input: { configuration: this.engine.inputConfiguration ?? null, devices: this.engine.inputDevices ?? [], enumeration: !!this.engine.audioCapabilities?.deviceSelection, explanation: this.engine.audioCapabilities?.configuration ?? "Input device enumeration unavailable in this backend" }, preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
   }
   private assetStates(p = this.project.document) {
     return this.project.assets(this.paths.samples, p).map(a => {
@@ -149,6 +162,7 @@ export class Application {
         this.traceCommand(c.cmd, "begin");
         const reply = await this.execute(c, id);
         this.traceCommand(c.cmd, "complete");
+        this.captureJamEvent(c, reply.msg);
         // Keep retry results small: full documents belong to status, not thousands
         // of cached command responses. Identity/revision is enough to chain local edits.
         return { ok: true, operationId: id, sessionId: this.sessionId, generation: this.engine.generation, projectId: this.project.document.id, revision: this.project.document.revision, history: this.project.history, ...reply };
@@ -244,7 +258,7 @@ export class Application {
         this.clearPerformance(); this.runtime.song = false; this.rig.stopped = true; this.rig.paused = true;
       }
       await this.applyProject(next, previous, id, mode === "switch");
-      if (mode === "switch") this.project.acceptSwitch(next);
+      if (mode === "switch") { this.project.acceptSwitch(next); this.jamTrail.reset(next); this.jamSummary = null; this.jamTake = null; }
       else if (mode === "undo" || mode === "redo") this.project.acceptHistory(mode === "redo", next);
       else this.project.commit(next, c.label ?? c.cmd, c.groupId);
       this.projectRig(); this.markApplied();
@@ -256,6 +270,7 @@ export class Application {
     }
   }
   private async execute(c: Command, id: string): Promise<{ msg: string; output?: string; acknowledgement?: EvalResult["acknowledgement"] }> {
+    if (c.cmd.startsWith("jam.")) return this.executeJam(c, id);
     if (["audio.stop", "audio.restart", "runtime.restart", "runtime.quit", "reset", "setdevice"].includes(c.cmd)) await this.capture.beforeReset(id);
     if (["audio.stop", "audio.restart", "runtime.restart", "runtime.quit"].includes(c.cmd)) return this.controlLifecycle(c, id);
     if (c.cmd === "audio.import") { const r = await this.userAudio.importFile(String(c.value), "user", c.assetId); return { msg: r.duplicate ? "Sound already in My Sounds" : "Sound added to My Sounds", output: r.entry.id }; }
@@ -398,6 +413,82 @@ export class Application {
       } catch (e) { Object.assign(this.rig, saved); this.rig.synchronized = false; this.runtime.appliedRevision = null; throw e; }
     }
     return result;
+  }
+  private captureJamEvent(c: Command, description: string) {
+    const capture = this.jamTake;
+    if (!capture?.active) return;
+    if (capture.projectId !== this.project.document.id || capture.generation !== this.engine.generation || ["audio.stop", "audio.restart", "runtime.restart", "runtime.quit", "reset", "stop"].includes(c.cmd)) { capture.active = false; return; }
+    const sceneEdit = c.edits?.find(e => e.type === "scene.activate");
+    if (!["scene.launch", "jam.variation", "jam.verb", "jam.macro.value", "jam.macros.reset"].includes(c.cmd) && !sceneEdit && !c.edits?.some(e => e.type === "mixer.set")) return;
+    const cycle = c.cmd === "scene.launch" ? this.performance.startCycle : null;
+    capture.take.events.push({ operation: c.cmd, revision: this.project.document.revision, cycle, timing: cycle !== null ? "scheduled" : "unavailable", ...(c.sceneId ? { sceneId: c.sceneId } : sceneEdit?.type === "scene.activate" ? { sceneId: sceneEdit.sceneId } : {}), ...(c.macroId ? { macroId: c.macroId, value: Number(c.value) } : {}), description: description.slice(0, 400) });
+    if (capture.take.events.length >= 128) capture.active = false;
+  }
+  private async executeJam(c: Command, id: string): Promise<{ msg: string }> {
+    if (this.external) throw new Error("Return to the managed project before jamming");
+    if (this.performanceDocument && !c.cmd.startsWith("jam.capture.")) throw new Error("Play active instruments before transforming: the launched performance is a prepared snapshot");
+    const before = this.project.document;
+    if (c.cmd === "jam.capture.start") {
+      if (this.jamTake?.active) throw new Error("A performance notebook is already recording");
+      this.jamTake = { active: true, projectId: before.id, generation: this.engine.generation, take: { id: uid(), name: "Jam performance", sourceRevision: before.revision, events: [], limitation: "Event notebook only; gestures are untimed acknowledgements, scene launches retain scheduled cycles. No automatic replay or arrangement conversion." } };
+      return { msg: "Recording an event notebook; use Rec for audio" };
+    }
+    if (c.cmd === "jam.capture.stop") { if (!this.jamTake) throw new Error("No performance notebook"); this.jamTake.active = false; return { msg: "Performance notebook stopped; Keep Performance retains its events" }; }
+    if (c.cmd === "jam.capture.keep") {
+      if (!this.jamTake || this.jamTake.active || !this.jamTake.take.events.length) throw new Error("Stop a performance notebook with events before keeping it");
+      const next = clone(before); next.jam ??= { locks: [], macros: [] }; next.jam.takes ??= [];
+      if (!next.jam.takes.some(t => t.id === this.jamTake!.take.id)) next.jam.takes.push(clone(this.jamTake.take));
+      await this.changeProject(validateProject(next), { ...c, label: "Keep Performance" }, id);
+      return { msg: "Performance event notebook kept in project; no timing conversion or automatic playback" };
+    }
+    if (c.cmd === "jam.keep") { this.jamTrail.keep(before); return { msg: "Kept in this session. Save jam to retain your current sound on disk." }; }
+    let next = clone(before), summary: JamSummary | undefined, label = "Jam";
+    if (c.cmd === "jam.variation") { const result = makeVariation(before, c.request!); next = result.document; summary = result.summary; label = c.request!.operation === "fill" ? "Add Fill" : c.request!.operation === "chaos" ? "Chaos" : "Make Variation"; }
+    else if (c.cmd === "jam.verb") { const result = applyVerb(before, c.verb!, c.trackIds!); next = result.document; summary = result.summary; label = summary.operation; }
+    else if (c.cmd === "jam.return") { next = this.jamTrail.target(before, c.ideaId!); label = "Return to idea"; }
+    else if (c.cmd === "jam.promote") { next = promoteJam(before, c.sceneId!, c.name!); label = "Save as " + c.name; }
+    else if (c.cmd === "jam.start") {
+      next = applyEdits(before, pocketGroove(before));
+      if (c.starter === "minimal") {
+        const remove = next.tracks.slice(2).map(t => ({ type: "track.delete" as const, trackId: t.id }));
+        next = applyEdits(next, remove); next.name = "Minimal groove";
+      }
+      if (c.starter !== "minimal") {
+        next = applyEdits(next, addSynth(next, next.sceneOrder[0], "reese"));
+        next.tracks.at(-1)!.name = "Bass";
+        const hats = next.tracks[2];
+        hats.effects = [{ id: uid(), definitionId: "reverb", version: 1, enabled: true, values: defaults(definition("effect", "reverb")!) }];
+      }
+      next.jam = { locks: [], macros: suggestedMacros(next) };
+      if (c.starter === "surprise") { const result = makeVariation(next, { seed: c.seed!, intensity: "fresh", operation: "variation", trackIds: next.tracks.map(t => t.id), scopes: ["rhythm"] }); next = result.document; summary = result.summary; next.name = "Unexpected pocket"; }
+      label = "Start Jam";
+    } else {
+      next.jam ??= { locks: [], macros: [] };
+      if (c.cmd === "jam.lock") { next.jam.locks = next.jam.locks.filter(l => l.trackId !== c.lock!.trackId); next.jam.locks.push(clone(c.lock!));
+        const track = next.tracks.find(t => t.id === c.lock!.trackId);
+        if (!track) throw new Error("Unknown locked track");
+        next.jam.locks.at(-1)!.offsets = Object.fromEntries(semanticTargets(track, true).filter(t => locked(next, track.id, t.scope, t.parameter)).map(t => [t.parameter, macroOffset(before, track.id, t.parameter)]));
+        label = "Keep / Change"; }
+      else if (c.cmd === "jam.macros.suggest") {
+        const suggestions = suggestedMacros(next).filter(m => !next.jam!.macros.some(old => old.id === m.id));
+        next.jam.macros.push(...suggestions); label = "Set up Jam macros";
+        if (!suggestions.length) throw new Error("No new macro targets. Add a supported instrument or creative FX in Sound Lab.");
+      } else if (c.cmd === "jam.macro.put") {
+        next.jam.macros = next.jam.macros.filter(m => m.id !== c.macro!.id); next.jam.macros.push(c.macro!); label = "Assign macro";
+      } else if (c.cmd === "jam.macro.value") {
+        const macro = next.jam.macros.find(m => m.id === c.macroId); if (!macro) throw new Error("Unknown macro");
+        if (macro.value !== Number(c.value) && !macro.targets.some(t => !locked(next, t.trackId, t.parameter.startsWith("fx.") ? "fx" : "sound", t.parameter))) throw new Error("All macro targets are kept. Unlock a target before moving this macro.");
+        macro.value = Number(c.value); label = macro.name + " macro";
+      } else if (c.cmd === "jam.macro.remove") { next.jam.macros = next.jam.macros.filter(m => m.id !== c.macroId); label = "Remove macro"; }
+      else if (c.cmd === "jam.macros.reset") { next.jam.macros.forEach(m => m.value = 0); label = "Reset macros"; }
+      else throw new Error("Unknown Jam operation");
+    }
+    next = validateProject(next);
+    await this.changeProject(next, { ...c, label }, id);
+    if (summary || c.cmd === "jam.return") this.jamTrail.record(before, this.project.document, label, summary);
+    if (summary) { this.jamSummary = summary; this.jamSummaryRevision = this.project.document.revision; }
+    else if (c.cmd === "jam.return") this.jamSummary = null;
+    return { msg: summary ? "Changed: " + summary.changed.join(", ") + ". Kept: " + (summary.kept.join(", ") || "all unselected parts") : label };
   }
   private legacyDocument(p: ProjectDocument): ProjectDocument {
     p = clone(p);

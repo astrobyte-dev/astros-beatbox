@@ -1,0 +1,107 @@
+{
+  "phase": "P4 \u2014 Jam & Exploration",
+  "date": "2026-09-07",
+  "branch": "feat/p4-jam-exploration",
+  "base": "63d99d0f61fc62f1430db8abebb60f540f90b164",
+  "draft_pr_base": "feat/p3.5b-capture-sampling",
+  "platform": "Ubuntu 24.04.4 LTS x86_64",
+  "node": "24.14.0",
+  "npm": "11.9.0",
+  "baseline": {
+    "node": "22.22.2 (initial shell default)",
+    "passed": 301,
+    "skipped": 3,
+    "total": 304,
+    "build": "pass",
+    "typechecks": "both pass",
+    "browser_journeys": 7,
+    "linux_runtime": "pass"
+  },
+  "implementation": "complete",
+  "tests": {
+    "passed": 374,
+    "skipped": 3,
+    "failed": 0,
+    "total": 377,
+    "new_p4_tests": 73,
+    "floor": 377,
+    "skip_reason": "Windows-only ownership/desktop cases"
+  },
+  "production_build": "pass",
+  "typecheck_server": "pass",
+  "typecheck_studio": "pass",
+  "journeys": {
+    "browser": {
+      "status": "pass",
+      "summary": "BROWSER PASS: real pointer painting, fader grouping, automation, scene switching, undo/redo, complete save/reopen, Stop and no JavaScript errors."
+    },
+    "studio": {
+      "status": "pass",
+      "summary": "STUDIO BROWSER PASS: starter, Play, canonical keyboard/pointer rhythm, grouped history, velocity, focus, mixer, code projection, selection, stale gesture, save/new/reopen/reload, legacy bidirectional sync, real MCP bidirectional sync, telemetry isolation, 1280/1440/1920 layouts, no JS/CSP errors."
+    },
+    "p2": {
+      "status": "pass",
+      "summary": "P2 FAKE BROWSER PASS: starter -> rhythm -> Preview -> Replace -> Undo/Redo -> Save -> reopen -> frontend reconnect -> Record/Preview -> finalize -> playback/download -> catalog after Undo/reload; three desktop widths; no JS/CSP errors."
+    },
+    "p3": {
+      "status": "pass",
+      "summary": "P3 BROWSER PASS: independent scenes, edit/launch/queue, explicit cycle observations, stable arrangement repeats/reorder, motion, performance view, zero-client advancement contract, frontend/MCP reconnect, real MCP and legacy sync, undo, code draft failure/correction/dependencies, save/reopen stopped, three widths. Fake audio only."
+    },
+    "p35": {
+      "status": "pass",
+      "summary": "P3.5A BROWSER PASS: synth collection, Play, grouped pointer/keyboard knobs, patch load/save, notes, ordered FX/bypass/undo, modulation/automation coexistence, FX semantic lanes/base edits/reorder/removal/Undo/Redo/independent disables, real MCP catalogue/edit/stale/unsupported rejection, independent scene notes, scene launch, save/new/reopen/reload, stale held gesture, three widths. Deterministic audio only."
+    },
+    "p35b": {
+      "status": "pass",
+      "summary": "P3.5B BROWSER PASS: upload/deduplicate/preview/add, waveform trim grouped Undo, reverse/pitch/FX, browser save and MCP reopen, fixture input/level/record/finalize/preview/keep/assign, chops/stable reorder/Undo/Redo, sequence/scene duplication, stale MCP rejection, full reopen and native-protocol buffer loading, three layouts. No physical audio/input acceptance claimed."
+    },
+    "system": {
+      "status": "pass",
+      "summary": "SYSTEM BROWSER PASS: health/inventory, three widths, native confirmation focus trap/Escape/return, guarded controls and transitions, live source logs/pause/clear/diagnostics, real unowned UDP conflict, clean Quit; no JS/CSP errors."
+    },
+    "p4": {
+      "status": "pass",
+      "summary": "P4 BROWSER PASS: quick start/play, Keep Kick/Bass, intensity, variation, A/B/return/branch, verbs, macro layers/stale gesture, event capture/Keep, promotion/scenes, bench, enter/exit, real MCP capabilities/variation/verb/macro/promotion/stale safety, client reconnect, save/reopen stopped, three widths/reduced motion. Fixture audio only."
+    },
+    "linux": {
+      "status": "pass",
+      "summary": "LINUX RUNTIME PASS: cold launch, second-launch session reuse, Studio/System, native inventory, Stop/Quit, SIGTERM/SIGINT/SIGHUP, owner exit/port release, unowned conflict protection. No audio claimed."
+    }
+  },
+  "visual_review": {
+    "status": "reviewed and refined",
+    "widths": [
+      1280,
+      1440,
+      1920
+    ],
+    "screenshots": [
+      "p4-start-1440.png",
+      "p4-jam-1280.png",
+      "p4-jam-1440.png",
+      "p4-jam-1920.png"
+    ],
+    "overflow": false,
+    "reduced_motion": "pass",
+    "native_musical_quality_claimed": false
+  },
+  "ubuntu_level": "B \u2014 Runtime Safe",
+  "acceptance_gates": {
+    "p26_windows_desktop_audio": "pending",
+    "p3_native_audio_timing_windows": "pending",
+    "p35a_native_audio_timing_cpu_windows": "pending",
+    "p35b_native_microphone_audio_windows": "pending",
+    "p4_native_audio_timing_cpu_musical_quality_windows": "pending"
+  },
+  "limits": [
+    "Macros commit once on gesture release; synth offsets affect new notes.",
+    "Scenes copy clips and clip automation; instruments/FX/macros remain shared.",
+    "Original and favorites retained in bounded runtime trail; save project for disk retention.",
+    "Held lock offsets persist until unlocking, including through free macro reset.",
+    "Performance notebook is bounded; non-scene gestures are untimed and no automatic replay/conversion exists.",
+    "No temporary browser-timed moment/stutter/drop engine."
+  ],
+  "p5_started": false,
+  "merged_lower_prs": false,
+  "system_audio_kernel_packages_changed": false
+}

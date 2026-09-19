@@ -25,7 +25,8 @@
     "selftest:system": "npm run build && node system-selftest.mjs",
     "selftest:linux": "npm run build && node linux-runtime-selftest.mjs",
     "selftest:system:live": "npm run build && node system-live-selftest.mjs",
-    "selftest:p35b": "npm run build && node p35b-selftest.mjs"
+    "selftest:p35b": "npm run build && node p35b-selftest.mjs",
+    "selftest:p4": "npm run build && node p4-selftest.mjs"
   },
   "engines": {
     "node": "24.14.0",

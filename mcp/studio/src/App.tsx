@@ -1,3 +1,4 @@
+import { Jam } from "./Jam";
 import { UserSounds, CapturePanel } from "./Sampling";
 import { InstrumentBrowser, SoundLab } from "./SoundLab";
 import { definition } from "../../src/sound-lab";
@@ -33,6 +34,7 @@ export function App() {
   } | null>(null);
   const [library, setLibrary] = useState("Grooves"),
     [mixer, setMixer] = useState(false);
+  const [jamming, setJamming] = useState(false);
   const [performing, setPerforming] = useState(false);
   const [files, setFiles] = useState<string[]>([]),
     [fileError, setFileError] = useState("");
@@ -278,10 +280,11 @@ export function App() {
           <Icon name="save" />
           Save jam
         </button>
+        <button className="jam-mode-button" aria-pressed={jamming} onClick={() => setJamming(!jamming)}>{jamming ? "Exit Jam" : "Jam"} ✳</button>
         <a href="/system" className="studio-system-link">System</a>
       </header>
-      <div className="studio-body">
-        <aside className="library" aria-label="Library">
+      <div className={`studio-body ${jamming ? "is-jamming" : ""}`}>
+        <aside hidden={jamming} className="library" aria-label="Library">
           <div className="library-top">
             <span className="eyebrow">YOUR SOUND STARTS HERE</span>
             <h2>
@@ -420,7 +423,7 @@ export function App() {
           </div>
         </aside>
         <main id="workspace" className="workspace" tabIndex={-1}>
-          <div className="workspace-intro">
+          {!jamming && <><div className="workspace-intro">
             <div>
               <span className="eyebrow">THE STUDIO / 01</span>
               <h1 ref={workspace} tabIndex={-1}>
@@ -450,6 +453,7 @@ export function App() {
               {statusText}
             </span>
           </div>
+          </>}
           {state.projectRuntime.song && (
             <div className="notice">
               An arrangement is playing. Switch to these instruments to hear the
@@ -492,6 +496,7 @@ export function App() {
             </div>
           )}
           {state.projectRuntime.externallyModified && <div className="notice" role="alert">Externally modified · this project does not fully describe current playback. Authored edits are kept without replacing external music. <button disabled={disabled} onClick={() => void client.command({ cmd: "performance.return" }, "Return to managed project")}>Return to managed project</button></div>}
+          {jamming ? <Jam key={state.sessionId + p.id} state={state} disabled={disabled} playing={playing} editTrack={id => { select(id); setJamming(false); setPerforming(false); setMixer(false); }} /> : <>
           {p.tracks.length > 0 && <Composition state={state} disabled={disabled} performing={performing} onPerform={() => { setPerforming(!performing); setMixer(!performing); }} />}
           {p.tracks.length ? (
             <>
@@ -655,6 +660,7 @@ export function App() {
               <span>Nothing plays until you press Play.</span>
             </div>
           )}
+          </>}
           <div className="feedback" aria-live="polite" aria-atomic="true">
             {connection.busy ? (
               `${connection.busy}… waiting for confirmation`
@@ -669,7 +675,7 @@ export function App() {
           </div>
         </main>
         <aside
-          hidden={performing}
+          hidden={performing || jamming}
           className={`inspector ${track ? accent(track.slot) : ""}`}
           aria-label="Instrument inspector"
         >

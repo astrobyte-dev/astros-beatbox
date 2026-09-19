@@ -1,3 +1,4 @@
+import { macroOffset } from "./jam-model.js";
 import { defaultPlayback } from "./sampling.js";
 import { compileFxAutomation } from "./fx-automation.js";
 import { definition } from "./sound-lab.js";
@@ -30,6 +31,7 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
     body += ' # pF "abxprev" "' + previous.map(number).join(" ") + '"';
     if (["dirtymono", "sub808"].includes(synth.id)) body += ' # cut ' + (100 + track.slot);
     for (const param of synth.parameters) if (!automation.some(a => a.parameter === "synth." + param.id)) body += ' # pF "abx' + param.id + '" ' + number(source.values[param.id]);
+    for (const param of synth.parameters) { const offset = macroOffset(p, track.id, "synth." + param.id); if (offset) body += ' # pF "j' + param.id + '" ' + number(offset); }
     for (const [key, value] of Object.entries(modulationControls(track.modulation ?? [], "synth."))) body += ' # pF "' + key + '" ' + number(value);
   }
   for (const key of Object.keys(c.parameters).sort() as (keyof typeof c.parameters)[]) {

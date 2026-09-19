@@ -36,6 +36,14 @@ sets/*.tidal               saved jams
 
 ## Dev workflow
 
+P4 is stacked on `feat/p3.5b-capture-sampling`. Read the
+[Jam & Exploration report](docs/p4-jam-exploration.md) for locks, held offsets,
+source capabilities, macro composition, inert snapshot history and event-notebook
+limits. `npm run selftest:p4` runs production Studio/HTTP/storage and real MCP with
+explicit fake audio, and writes only P4 screenshots. It is included in CI.
+Native/Windows musical-quality gates remain open. Do not add browser musical
+randomness, source-file mutation or a second project/playback authority.
+
 P3.5B is stacked on `feat/p3.5a-sound-lab-core`. Read the
 [Capture & Sampling report](docs/p35b-capture-sampling.md) for storage, routing,
 limits and pending native input/audio gates. `npm run selftest:p35b` runs production

@@ -1,3 +1,4 @@
+import { jamSchema, validateJam, pruneJam } from "./jam-model.js";
 import { samplePlaybackSchema, sliceSchema, audioMetadataSchema } from "./sampling.js";
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
@@ -24,6 +25,7 @@ export const trackSchema = z.object({ id, name: z.string().max(120), slot: z.num
 const sceneSchema = z.object({ id, name: z.string().min(1).max(120), clips: z.record(id, id.nullable()) }).strict();
 const arrangementSchema = z.array(z.object({ id, sceneId: id, cycles: z.number().int().min(1).max(128) }).strict()).max(512);
 const documentSchema = z.object({
+  jam: jamSchema.optional(),
   schemaVersion: z.literal(1), id, revision: z.number().int().nonnegative().safe(), name: z.string().max(120),
   tempo: z.object({ bpm: finite.positive().max(1000), beatsPerCycle: finite.positive().max(32) }).strict(),
   tracks: z.array(trackSchema).max(16), clips: z.array(clipSchema).max(1024), scenes: z.array(sceneSchema).min(1).max(128), sceneOrder: z.array(id).min(1).max(128),
@@ -88,6 +90,7 @@ export function validateProject(value: unknown): ProjectDocument {
   for (const s of p.scenes) for (const [t, c] of Object.entries(s.clips)) ref(t, c);
   for (const a of p.arrangement) if (!p.scenes.some(s => s.id === a.sceneId)) throw new Error("Invalid arrangement scene");
   for (const a of p.automation) { ref(a.trackId, a.clipId); if (a.parameter.startsWith("synth.")) { const t = p.tracks.find(t => t.id === a.trackId)!; if (!targetDefinition(t, a.parameter) && !(t.source?.type === "synth" && !definition("instrument", t.source.definitionId, t.source.version))) throw new Error("Unsupported synth automation target"); } if (a.parameter.startsWith("fx.")) { const t = p.tracks.find(t => t.id === a.trackId)!, fx = t.effects?.find(f => f.id === a.parameter.split(".")[1]); if (!fx || definition("effect", fx.definitionId, fx.version) && !targetDefinition(t, a.parameter)?.automatable) throw new Error("Unsupported FX automation target: " + a.parameter); } if (a.clipId && p.clips.find(c => c.id === a.clipId)!.kind !== "steps") throw new Error("Visual automation requires a step clip"); }
+  validateJam(p);
   unique(p.automation.map(a => a.trackId + ":" + a.clipId + ":" + a.parameter), "automation target");
   return p;
 }
@@ -200,5 +203,6 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
     case "project.rename": p.name = e.name; break;
     case "dependencies.set": p.dependencies = e.dependencies; break;
   }
+  pruneJam(p);
   return validateProject(p);
 }

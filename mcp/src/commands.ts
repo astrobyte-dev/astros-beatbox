@@ -1,3 +1,4 @@
+import { variationSchema, jamLockSchema, macroSchema, verbSchema } from "./jam-model.js";
 import { samplePlaybackSchema, libraryDetailsSchema } from "./sampling.js";
 import { z } from "zod";
 import { editSchema, type ProjectEdit, type ProjectDocument } from "./project.js";
@@ -16,6 +17,16 @@ const code = z.string().trim().min(1).max(65536);
 const bare = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd) }).strict();
 const layer = (cmd: string) => z.object({ ...meta, cmd: z.literal(cmd), slot }).strict();
 export const commandSchema = z.union([
+  z.object({ ...meta, cmd: z.literal("jam.variation"), request: variationSchema }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.lock"), lock: jamLockSchema }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.verb"), verb: verbSchema, trackIds: z.array(z.string()).min(1).max(16) }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.macro.put"), macro: macroSchema }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.macro.value"), macroId: z.string(), value: z.number().finite().min(-1).max(1) }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.macro.remove"), macroId: z.string() }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.return"), ideaId: z.string() }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.promote"), sceneId: z.string(), name: z.string().trim().min(1).max(120) }).strict(),
+  z.object({ ...meta, cmd: z.literal("jam.start"), starter: z.enum(["groove", "minimal", "surprise"]), seed: z.number().int().min(0).max(4294967295).default(1) }).strict(),
+  ...["jam.keep", "jam.macros.reset", "jam.macros.suggest", "jam.capture.start", "jam.capture.stop", "jam.capture.keep"].map(bare),
   z.object({ ...meta, cmd: z.literal("audio.import"), value: z.string().min(1).max(2048), assetId: z.string().regex(/^audio_[a-f0-9]{64}$/).optional() }).strict(),
   z.object({ ...meta, cmd: z.literal("audio.details"), assetId: z.string(), libraryRevision: z.number().int().nonnegative(), details: libraryDetailsSchema }).strict(),
   z.object({ ...meta, cmd: z.literal("audio.add"), value: z.string(), projectId: z.string(), revision: z.number().int().nonnegative() }).strict(),
@@ -49,7 +60,7 @@ export const commandSchema = z.union([
   z.object({ ...meta, cmd: z.literal("setdevice"), value: z.string().max(512).refine((s) => !/[\r\n\0]/.test(s)) }).strict(),
 ]);
 // A compact wire type; runtime validation above narrows each command's fields.
-export interface Command { cmd: string; assetId?: string; libraryRevision?: number; details?: import("./sampling.js").LibraryDetails; playback?: import("./sampling.js").SamplePlayback; device?: string; channel?: number; gain?: number; monitor?: boolean; sceneId?: string; boundary?: "immediate" | "cycle"; repeat?: boolean; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
+export interface Command { cmd: string; request?: import("./jam-model.js").VariationRequest; lock?: import("zod").z.infer<typeof jamLockSchema>; macro?: import("./jam-model.js").JamMacro; macroId?: string; verb?: import("zod").z.infer<typeof verbSchema>; trackIds?: string[]; ideaId?: string; name?: string; starter?: "groove" | "minimal" | "surprise"; seed?: number; assetId?: string; libraryRevision?: number; details?: import("./sampling.js").LibraryDetails; playback?: import("./sampling.js").SamplePlayback; device?: string; channel?: number; gain?: number; monitor?: boolean; sceneId?: string; boundary?: "immediate" | "cycle"; repeat?: boolean; expectedGeneration?: number; clipId?: string; slot?: string; param?: string; value?: string | number; operationId?: string; sessionId?: string; issuedAt?: number; projectId?: string; revision?: number; groupId?: string; edits?: ProjectEdit[]; label?: string }
 export type CommandResult = {
   operationId: string; sessionId: string; generation: number;
   projectId?: string; revision?: number; project?: ProjectDocument; history?: { undo: number; redo: number };
@@ -72,5 +83,5 @@ export function validateCommand(input: unknown): Command {
 // Adapters require explicit optimistic concurrency for every external operation
 // that can target music. Runtime-only Stop/record/reset keep the P0a wire contract.
 export function requiresProjectRevision(cmd: string): boolean {
-  return cmd === "audio.add" || cmd === "audio.assign" || cmd === "scene.launch" || cmd === "code.apply" || cmd === "performance.return" || cmd === "sound.replace" || ["eval", "eval_sc", "hush", "silence", "tempo", "set", "mute", "unmute", "solo", "unsolo", "load", "save", "resume"].includes(cmd) || cmd.startsWith("project.") || cmd.startsWith("song.");
+  return cmd.startsWith("jam.") || cmd === "audio.add" || cmd === "audio.assign" || cmd === "scene.launch" || cmd === "code.apply" || cmd === "performance.return" || cmd === "sound.replace" || ["eval", "eval_sc", "hush", "silence", "tempo", "set", "mute", "unmute", "solo", "unsolo", "load", "save", "resume"].includes(cmd) || cmd.startsWith("project.") || cmd.startsWith("song.");
 }

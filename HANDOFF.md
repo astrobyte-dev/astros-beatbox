@@ -1,25 +1,36 @@
 # Astro's Beatbox handover
 
-Updated 2026-09-07 (Australia/Hobart). **P2.5 is complete and accepted.**
-Current portability task: **P2.6, Level B validated on Ubuntu; Windows gate pending**.
-Active feature work: **P3.5B — Capture & Sampling Lab**, on
-`feat/p3.5b-capture-sampling`, based on exact P3.5A head
-`3ea7f7b4441bdd456c83699f9a170c9e6c9a56d9`.
-See [the Capture & Sampling implementation/completion report](docs/p35b-capture-sampling.md)
-and [TASK-3.5B](tasks/TASK-3.5B.md). Implementation and available portable validation
-are complete: **301 passed, 3 Windows-only skips (304 total)**, production build,
-both typechecks, seven browser journeys, real MCP synchronization and Linux runtime
-lifecycle. The Capture creative workflow uses explicit synthetic audio fixtures.
-Native microphone/audio/timing/CPU acceptance remains pending.
-The P3.5B draft targets `feat/p3.5a-sound-lab-core`, not main.
+Updated 2026-09-07 (Australia/Hobart). Active implementation: **P4 — Jam &
+Exploration**, on `feat/p4-jam-exploration`, stacked on exact P3.5B commit
+`63d99d0f61fc62f1430db8abebb60f540f90b164`. P4 implementation and available
+Ubuntu validation are complete. See [the complete P4 report](docs/p4-jam-exploration.md),
+[TASK-4](tasks/TASK-4.md) and [validation results](docs/p4-validation.json).
 
-P3.5A remains implementation complete; see [Sound Lab Core](docs/p35-sound-lab-core.md).
-P3 remains implementation complete; see [composition/performance](docs/p3-composition-performance.md).
-All inherited gates remain open: P2.6 Windows desktop/audio; P3 native audio/timing
-and Windows; P3.5A native audio/timing/CPU and Windows. P3.5B adds its own native
-input/audio and Windows gate. P2.6 remains Ubuntu Level B Runtime Safe.
-No native or Windows gate was closed and no system/audio packages were changed.
-Do not begin P4/P5 or merge any stacked drafts as part of P3.5B delivery.
+Final validation: **374 passed, 3 Windows-only skips (377 discovered)**, production
+build, both typechecks, eight browser journeys, real MCP synchronization and Linux
+runtime/lifecycle. Final checks use Node 24.14.0 / npm 11.9.0. Screenshots were
+critically reviewed and the Jam layout refined. Fixture audio is not native proof.
+The P4 draft targets `feat/p3.5b-capture-sampling`. Do not merge stacked drafts.
+**P5 was not started.**
+
+ProjectService remains the musical authority. Jam adds server-side seeded semantic
+transformations, persisted locks/held macro offsets, independent bounded macro
+layering, inert runtime exploration snapshots, scene clip promotion and a bounded
+performance event notebook. The notebook does not replay or invent timing. Existing
+instruments/FX/macros remain shared across scenes; macro gestures commit on release
+and synth offsets affect new notes. Read the report before extending these contracts.
+
+All inherited gates remain open: **P2.6 Windows desktop/audio; P3 native audio/timing
+and Windows; P3.5A native audio/timing/CPU and Windows; P3.5B native microphone/audio
+and Windows**. P4 adds native audible/musical-quality, macro/timing/CPU and Windows
+acceptance. Ubuntu remains **Level B — Runtime Safe**, native audio unvalidated.
+No system/audio/kernel packages were changed. P2.5's previously accepted Windows
+milestone remains historically accepted; it does not close later revalidation gates.
+
+P3.5B, P3.5A and P3 implementation reports remain available at
+[Capture & Sampling](docs/p35b-capture-sampling.md),
+[Sound Lab Core](docs/p35-sound-lab-core.md) and
+[Composition & Performance](docs/p3-composition-performance.md).
 
 ## Checkpoint
 

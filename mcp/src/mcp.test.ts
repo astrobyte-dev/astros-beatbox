@@ -15,8 +15,9 @@ test("existing MCP launch exposes shared validation, session IDs and isError fai
   const client = new Client({ name: "p0a-test", version: "1" });
   try {
     await client.connect(transport);
-    const listed = await client.listTools(); assert.deepEqual(listed.tools.map((t) => t.name).filter(n => !n.startsWith("project_") && !n.startsWith("user_audio_") && !n.startsWith("capture_")).sort(), ["arrangement_start", "arrangement_stop", "boot", "eval_sc", "eval_tidal", "hush", "managed_code_apply", "performance_return", "scene_launch", "sound_lab_catalog", "status"]);
+    const listed = await client.listTools(); assert.deepEqual(listed.tools.map((t) => t.name).filter(n => !n.startsWith("project_") && !n.startsWith("user_audio_") && !n.startsWith("capture_") && !n.startsWith("jam_")).sort(), ["arrangement_start", "arrangement_stop", "boot", "eval_sc", "eval_tidal", "hush", "managed_code_apply", "performance_return", "scene_launch", "sound_lab_catalog", "status"]);
     assert.ok(listed.tools.some(t => t.name === "project_edit"));
+    assert.deepEqual(listed.tools.map(t => t.name).filter(n => n.startsWith("jam_")).sort(), ["jam_capture_keep", "jam_capture_start", "jam_capture_stop", "jam_inspect", "jam_keep", "jam_lock", "jam_macro_assign", "jam_macro_value", "jam_macros_reset", "jam_macros_suggest", "jam_promote", "jam_return", "jam_variation", "jam_verb"]);
     assert.deepEqual(listed.tools.map(t => t.name).filter(n => n.startsWith("user_audio_") || n.startsWith("capture_")).sort(), ["capture_controls", "capture_discard", "capture_keep", "capture_prepare", "capture_preview", "capture_start", "capture_status", "capture_stop", "user_audio_add", "user_audio_assign", "user_audio_details", "user_audio_import", "user_audio_library", "user_audio_preview"]);
     const status = await client.callTool({ name: "status", arguments: {} });
     const state = JSON.parse((status.content as { text: string }[])[0].text);
