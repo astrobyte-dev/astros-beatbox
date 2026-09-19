@@ -1,10 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ProcessIdentity } from "./owned-process.js";
+import { inspectLinux } from "./linux-process.js";
 const exec = promisify(execFile);
 export interface ProcessRow extends ProcessIdentity { parentPid: number; name: string; path: string | null; startedAt: string }
 export interface SocketRow { protocol: "TCP" | "UDP"; port: number; address: string; pid: number }
 export interface Inspection { at: number; processes: ProcessRow[]; sockets: SocketRow[]; error: string | null }
+export async function inspectPlatform(): Promise<Inspection> {
+  return process.platform === "linux" ? inspectLinux() : inspectWindows();
+}
 
 export function parseNetstat(text: string): SocketRow[] {
   return text.split(/\r?\n/).flatMap(line => {
@@ -63,7 +67,7 @@ export function portInventory(snapshot: Inspection, owned: Set<number>, required
       const owner = snapshot.processes.find(row => row.pid === s.pid) ?? null;
       // Non-loopback bindings are displayed but cannot establish a local conflict.
       const local = ["0.0.0.0", "127.0.0.1", "[::]", "[::1]"].includes(s.address);
-      return { ...s, purpose: p.purpose, owner, owned: owned.has(s.pid), state: snapshot.error ? "unknown" as const : !s.pid ? "free" as const : owned.has(s.pid) ? "owned" as const : local ? "conflict" as const : "unknown" as const, appearsBeatbox: !!owner && /sclang|scsynth|ghci/i.test(owner.name) };
+      return { ...s, purpose: p.purpose, owner, owned: owned.has(s.pid), state: snapshot.error ? "unknown" as const : !bindings.length ? "free" as const : owned.has(s.pid) ? "owned" as const : local ? "conflict" as const : "unknown" as const, appearsBeatbox: !!owner && /sclang|scsynth|ghci/i.test(owner.name) };
     });
   });
 }
@@ -73,6 +77,6 @@ export class RuntimeInspection {
   private pending: Promise<Inspection> | null = null;
   async refresh(force = false): Promise<Inspection> {
     if (!force && Date.now() - this.snapshot.at < 3000) return this.snapshot;
-    return this.pending ??= inspectWindows().then(s => this.snapshot = s).finally(() => { this.pending = null; });
+    return this.pending ??= inspectPlatform().then(s => this.snapshot = s).finally(() => { this.pending = null; });
   }
 }

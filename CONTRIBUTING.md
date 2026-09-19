@@ -36,6 +36,11 @@ sets/*.tidal               saved jams
 
 ## Dev workflow
 
+For Ubuntu, start with [P2.6 setup and status](docs/p26-ubuntu-portability.md).
+Portable development and native Node lifecycle checks pass; native audio remains
+unvalidated and the P2.6 Windows acceptance gate is pending. The Windows workflow
+below remains the audio regression contract.
+
 Use **Node 24.14.0 / npm 11.9.0** (`.nvmrc`) and `npm ci` in `mcp`.
 The frontend pins React 19.2.8, Vite 8.2.2, TypeScript 5.9.3 and the React plugin
 6.1.1. `npm run build` builds server and studio; `npm run typecheck` checks both.
@@ -75,6 +80,10 @@ Outfit and DM Sans are bundled locally, with no font CDN dependency.
 - Run every live test sequentially after stopping the normal rig. Read the
   [P2 report](docs/p2-creative-loop.md) for current validation status and limits.
 - **Automated tests:** `npm test` builds first; `npm run typecheck` checks types separately.
+- **Linux runtime acceptance:** `npm run selftest:linux` checks actual Node/HTTP
+  reuse, Studio/System, process/socket inspection, signals and safe Quit without
+  audio. `node linux-runtime-selftest.mjs --open` additionally checks the actual
+  default browser. The full unit suite includes native Linux pidfd/tree tests.
 - **Smoke test the whole chain:** `npm run selftest` (boots SuperDirt + Tidal and plays a beat).
 - **P0a runtime regression:** `npm run selftest:p0a` checks command errors, Stop/Play,
   save/load, non-silent WAV recording, retries, timeout quarantine and Reset. It uses

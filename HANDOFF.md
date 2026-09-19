@@ -1,7 +1,8 @@
 # Astro's Beatbox handover
 
 Updated 2026-09-07 (Australia/Hobart). **P2.5 is complete and accepted.**
-Next phase: **P3, not started**. Do not begin it without an agreed task scope.
+Current portability task: **P2.6, Level B validated on Ubuntu; Windows gate pending**.
+Next feature phase: **P3, not started**. Do not begin it without an agreed task scope.
 The repository has no approved `tasks/TASK-3.md`; earlier reports identify P3
 only as the next phase. Do not infer a specification from roadmap hints.
 
@@ -92,3 +93,30 @@ configuration, environment files, logs, raw process inventories and temporary
 test captures are intentionally not part of the checkpoint. A fresh clone starts
 without personal jams or takes. Copy those separately only if you want your music;
 development and its regression fixtures do not depend on them.
+
+## Ubuntu / Linux — P2.6
+
+Last development platform: **Ubuntu 24.04.4 LTS, x86_64**.
+See [TASK-2.6](tasks/TASK-2.6.md) and [Ubuntu setup](docs/p26-ubuntu-portability.md).
+
+- Shared build, typechecks and tests: **PASS**.
+- Classic/Studio/P2/System browser journeys: **PASS** with fake audio.
+- Linux process/socket, owned Node descendants, Stop/Restart/Quit, signal shutdown,
+  cold/second launch and actual default-browser request: **PASS**.
+- Ubuntu status: **Level B — Runtime Safe**; native audio **NOT VALIDATED**.
+- Native setup blocker: pre-existing half-configured Ubuntu kernel package.
+  No system/audio packages or global configuration were changed by this phase.
+- **WINDOWS REVALIDATION IS PENDING**: real launcher/default browser, zero console
+  shows, second-launch runtime/session stability, recording continuity/finalization,
+  Restart Audio, Stop, Quit, descendant cleanup and unrelated-process protection.
+  Do not merge P2.6 as fully cross-platform-safe before these checks pass.
+
+Use `nvm install && nvm use`, then the normal `mcp` npm commands. Linux requires
+Python 3.9+ with pidfds for managed audio ownership. The backend does not load
+`.env`; supply documented variables externally. Linux state lives in workspace-
+specific XDG locations, not the checkout. Do not commit local state or replace
+Windows acceptance screenshots with regenerated Linux captures.
+
+The missing TASK-2.4 reference belonged to the pasted migration handoff; no
+repository reference/history establishes that file. It was not reconstructed.
+P3 has not begun and has no approved task specification.

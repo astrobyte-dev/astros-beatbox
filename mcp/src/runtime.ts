@@ -27,7 +27,7 @@ export async function startRuntime(port = DASHBOARD_PORT) {
     }
     return { ...app.projectState(), scope: SCOPE_ENABLED, scopes, status: engine.state, state: engine.state, error: engine.error || meter.error, faultVersion: engine.faultVersion, lastFault: engine.lastFault, generation: engine.generation, sessionId: app.sessionId,
       synchronized: rig.synchronized && (engine.state === "ready" || engine.state === "idle" && !engine.error), stopped: rig.stopped, paused: rig.paused, recPath: rig.recPath, tempoBpm: rig.tempoBpm, meterL: meter.l, meterR: meter.r, meterAge: meter.lastUpdate, slots: rig.slots, muted: [...rig.muted], solo: rig.solo, hits, spectrum: meter.spectrum,
-      recording: rig.recording && engine.running, recordingUnconfirmed: rig.recording && !engine.running, devices: engine.devices, device: engine.currentDevice,
+      recording: rig.recording && engine.running, recordingUnconfirmed: rig.recording && !engine.running, devices: engine.devices, device: engine.currentDevice, audioCapabilities: engine.audioCapabilities,
       files: app.project.storage?.list() ?? [], dashboard: `http://127.0.0.1:${(dashboard.address() as { port: number } | null)?.port ?? port}` };
   };
   let closed = false, audioClosed = false;
@@ -73,9 +73,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const runtime = await startRuntime();
     const stop = () => { try { runtime.close(); } catch (e) { process.stderr.write(String(e)); process.exitCode = 1; } };
-    const graceful = () => { void runtime.quit().then(r => { if (!r.ok) { process.stderr.write(r.error + "\n"); process.exitCode = 1; } }); };
+    let shutdown: Promise<unknown> | undefined;
+    const graceful = () => { shutdown ??= runtime.quit().then(r => { if (!r.ok) { process.stderr.write(r.error + "\n"); process.exitCode = 1; shutdown = undefined; } }).catch(e => { process.stderr.write(String(e) + "\n"); process.exitCode = 1; shutdown = undefined; }); };
     process.on("SIGINT", graceful);
     process.on("SIGTERM", graceful);
+    if (process.platform === "linux") process.on("SIGHUP", graceful);
     process.on("exit", stop);
   } catch (e) { process.stderr.write("Runtime startup failed: " + String(e) + "\n"); process.exitCode = 1; }
 }

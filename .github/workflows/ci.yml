@@ -7,7 +7,11 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: mcp
@@ -26,3 +30,6 @@ jobs:
       - run: npm run selftest:browser
       - run: npm run selftest:studio
       - run: npm run selftest:p2
+      - run: npm run selftest:system
+      - if: runner.os == 'Linux'
+        run: npm run selftest:linux

@@ -15,6 +15,7 @@ import type { Asset } from "./sound-library.js";
 import { captureRoute, captureInput, finishRecorder, recordingWarning, type RecordingDiagnostics } from "./recording-diagnostics.js";
 
 export interface CommandEngine {
+  audioCapabilities?: { deviceSelection: boolean; configuration: string };
   generation: number; running: boolean; state: string; error: string | null;
   ensureBooted(): Promise<void>; reboot(): Promise<void>; assertGeneration(generation: number): void;
   assertSampleLoaded?(asset: Asset): void;
@@ -440,12 +441,13 @@ export class Application {
       return { msg: c.cmd === "hush" ? "hush — patterns cleared" : "stopped — patterns kept; press Play to resume" };
     }
     if (c.cmd === "reset" || c.cmd === "setdevice") {
+      if (c.cmd === "setdevice" && this.engine.audioCapabilities?.deviceSelection === false) throw new Error(this.engine.audioCapabilities.configuration);
       let recordingFailure = "";
       if (r.recording || this.recorderUncertain) {
         try { await this.finishRecording(id); }
         catch (e) { recordingFailure = "Recording finalization was not confirmed: " + r.recPath + ". " + String(e); }
       }
-      if (c.cmd === "setdevice") writeFileSync(this.paths.device, String(c.value).trim(), "utf8");
+      if (c.cmd === "setdevice") { mkdirSync(path.dirname(this.paths.device), { recursive: true }); writeFileSync(this.paths.device, String(c.value).trim(), "utf8"); }
       r.synchronized = false;
       await this.engine.reboot(); r.recording = false; this.recorderUncertain = false; await this.restore(id);
       if (recordingFailure) throw new Error("Engine restarted and patterns restored. " + recordingFailure);

@@ -4,23 +4,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DASHBOARD_PORT, RECOVERY_DIR } from "./config.js";
 import { RUNTIME_PROTOCOL, runtimeKey, startRuntime } from "./runtime.js";
-import { inspectWindows } from "./runtime-inspection.js";
+import { inspectPlatform } from "./runtime-inspection.js";
 
 export function validRuntime(info: unknown): info is { ready: boolean; sessionId: string; pid: number } {
   const i = info as Record<string, unknown> | null;
   return !!i && i.kind === "astros-beatbox-runtime" && i.protocol === RUNTIME_PROTOCOL && i.key === runtimeKey && typeof i.ready === "boolean" && Number.isSafeInteger(i.pid) && Number(i.pid) > 0 && (!i.ready || typeof i.sessionId === "string" && /^[a-f0-9-]{36}$/.test(i.sessionId));
 }
 export async function portConflict(port: number): Promise<Error> {
-  const os = await inspectWindows();
+  const os = await inspectPlatform();
   const sockets = os.sockets.filter(s => s.port === port && s.protocol === "TCP");
   const owners = sockets.map(s => { const p = os.processes.find(p => p.pid === s.pid); return `${p?.name ?? "unknown process"}, PID ${s.pid}${p?.path ? ", " + p.path : ""}${p?.startedAt ? ", started " + p.startedAt : ""}`; });
   return new Error(`PORT CONFLICT (EADDRINUSE) on TCP ${port}: ${owners.join("; ") || "owner could not be inspected"}. This is not a verified compatible Beatbox runtime. No process was stopped.`);
 }
 
-export async function connectRuntime(): Promise<{ url: string; reused: boolean; close: () => void }> {
+export async function connectRuntime(): Promise<{ url: string; reused: boolean; close: () => void | Promise<void> }> {
   // Port zero is explicitly ephemeral: retained for embedded tests and isolated
   // callers. The registered, fixed-port MCP launch uses the persistent owner.
-  if (DASHBOARD_PORT === 0) { const r = await startRuntime(0); return { url: r.url, reused: false, close: r.close }; }
+  if (DASHBOARD_PORT === 0) { const r = await startRuntime(0); return { url: r.url, reused: false, close: async () => { const result = await r.quit(); if (!result.ok) throw new Error(result.error); } }; }
   const url = `http://127.0.0.1:${DASHBOARD_PORT}`;
   const probe = async () => {
     let response: Response;

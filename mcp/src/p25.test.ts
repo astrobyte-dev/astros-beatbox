@@ -160,7 +160,9 @@ test("failed recording finalization stops owned audio but does not silently quit
 test("headless launch paths force windowsHide and do not wrap managed interpreters in a shell", () => {
   const proc = readFileSync(new URL("../src/proc.ts", import.meta.url), "utf8");
   assert.match(proc, /windowsHide: true, stdio: \["pipe", "pipe", "pipe"\]/); assert.doesNotMatch(proc, /shell: true|cmd\.exe/);
-  for (const f of ["runtime-client", "runtime-inspection", "owned-process", "launcher"]) assert.match(readFileSync(new URL(`../src/${f}.ts`, import.meta.url), "utf8"), /windowsHide: true/);
+  // Browser creation moved from launcher to its platform adapter in P2.6.
+  for (const f of ["runtime-client", "runtime-inspection", "owned-process", "browser"]) assert.match(readFileSync(new URL(`../src/${f}.ts`, import.meta.url), "utf8"), /windowsHide: true/);
+  assert.match(readFileSync(new URL("../src/launcher.ts", import.meta.url), "utf8"), /await openBrowser\(studio\)/);
 });
 test("real Windows inventory agrees with a freshly captured owned process identity", { skip: process.platform !== "win32" }, async () => {
   const child = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { windowsHide: true, stdio: "ignore" });

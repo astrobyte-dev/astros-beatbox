@@ -12,7 +12,7 @@ function ghciEnv(): NodeJS.ProcessEnv {
     env[k] = v;
   }
   env.PATH = GHCI_PATH;
-  env.CABAL_DIR = CABAL_DIR;
+  if (CABAL_DIR) env.CABAL_DIR = CABAL_DIR;
   return env;
 }
 

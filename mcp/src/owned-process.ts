@@ -1,6 +1,27 @@
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { readLinuxIdentity } from "./linux-process.js";
 
 export interface ProcessIdentity { pid: number; started: string }
+const linuxHelper = fileURLToPath(new URL("../linux-stop.py", import.meta.url));
+export function checkOwnershipSupport(): void {
+  if (process.platform === "linux") execFileSync("python3", [linuxHelper, "--check"], { timeout: 5000, stdio: "pipe" });
+  else if (process.platform !== "win32") throw new Error("Managed audio ownership is unsupported on this platform");
+}
+export function captureOwnedIdentity(pid: number): ProcessIdentity {
+  if (process.platform === "win32") return identifyOwnedProcess(pid);
+  if (process.platform !== "linux") throw new Error("Managed audio ownership is unsupported on this platform");
+  const p = readLinuxIdentity(pid);
+  if (p.group !== pid || p.session !== pid) throw new Error("Audio child has no dedicated Linux session");
+  return { pid, started: p.started };
+}
+export function stopManagedTree(identity: ProcessIdentity, grace = 2, timeout = 6): void {
+  if (process.platform === "win32") return stopOwnedProcessTree(identity);
+  if (process.platform !== "linux") throw new Error("Managed audio cleanup is unsupported on this platform");
+  if (!(grace >= 0 && timeout > 0 && timeout <= 30)) throw new Error("Invalid cleanup deadline");
+  try { execFileSync("python3", [linuxHelper, JSON.stringify(identity), String(grace), String(timeout)], { timeout: (timeout + 2) * 1000, encoding: "utf8", stdio: "pipe" }); }
+  catch (e) { throw new Error("Linux owned-process cleanup unconfirmed: " + String((e as { stderr?: string }).stderr || e)); }
+}
 function powershell(script: string): string {
   return execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", windowsHide: true, timeout: 15000 }).trim();
 }

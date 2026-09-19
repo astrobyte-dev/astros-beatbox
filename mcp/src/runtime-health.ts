@@ -5,6 +5,7 @@ import { RuntimeInspection, portInventory, verifiedTree } from "./runtime-inspec
 import type { ProcessIdentity } from "./owned-process.js";
 import type { RuntimeLogs } from "./runtime-logs.js";
 import type { ProcDriver } from "./proc.js";
+import { PLATFORM, PLATFORM_NAME } from "./platform.js";
 
 export interface Component {
   id: string; parent: string | null; name: string; technical: string; state: string;
@@ -48,10 +49,10 @@ export class RuntimeHealth {
     const fresh = m.lastUpdate > 0 && now - m.lastUpdate < 3000;
     const inspectionFresh = !os.error && now - os.at < 15000 && generation === e.generation;
     const conflict = ports.some(p => p.state === "conflict");
-    const missingProcess = e.state === "ready" && (!e.tidal.pid || !owned.has(e.tidal.pid) || !e.sclang.pid || !owned.has(e.sclang.pid) || !os.processes.some(p => owned.has(p.pid) && /scsynth/i.test(p.name)));
+    const missingProcess = !os.error && e.state === "ready" && (!e.tidal.pid || !owned.has(e.tidal.pid) || !e.sclang.pid || !owned.has(e.sclang.pid) || !os.processes.some(p => owned.has(p.pid) && /scsynth/i.test(p.name)));
     const audioState = e.state === "booting" ? "Starting" : e.state === "idle" ? "Idle" : e.state === "ready" && e.running && fresh ? "Ready" : "Degraded";
     const busy = !["idle", "Complete", "Failed"].includes(a.lifecycle.phase);
-    const state = busy ? a.lifecycle.phase : conflict || missingProcess || e.state === "error" || e.state === "degraded" || m.error || a.lifecycle.error || e.state === "ready" && !fresh || !inspectionFresh ? "Needs attention" : audioState === "Idle" ? "Ready when you are" : audioState === "Starting" ? "Preparing your instruments" : "Everything is in tune";
+    const state = busy ? a.lifecycle.phase : conflict || missingProcess || e.state === "error" || e.state === "degraded" || m.error || a.lifecycle.error || e.state === "ready" && !fresh || PLATFORM === "win32" && !inspectionFresh ? "Needs attention" : os.error || !inspectionFresh ? "Inspection unavailable" : audioState === "Idle" ? "Ready when you are" : audioState === "Starting" ? "Preparing your instruments" : "Everything is in tune";
     if (state !== this.previous) { this.previous = state; this.transitionedAt = now; this.logs.add("runtime", state); }
     const components: Component[] = [];
     const add = (id: string, parent: string | null, name: string, technical: string, status: string, health: string, pid: number | null = process.pid, startedAt: string | null = this.startedAt, ownership = "Beatbox-owned service", restart: string | null = null, error: string | null = null) => {
@@ -83,8 +84,8 @@ export class RuntimeHealth {
     add("mcp", null, "Connected assistants", "MCP stdio clients", [...this.bridges.values()].some(b => b.connected && now - b.at < 15000) ? "Connected" : "Disconnected", "Clients connect to the runtime; disconnecting keeps music running", null, null, "External clients / not owned");
     for (const [id, b] of this.bridges) add(id, "mcp", "Assistant bridge", "MCP / Node (reported PID)", b.connected && now - b.at < 15000 ? "Connected" : "Disconnected", "Connection heartbeat; not an ownership claim", b.pid, b.startedAt, "Host-launched / not owned");
     for (const id of this.transitions.keys()) if (!components.some(c => c.id === id)) this.transitions.delete(id);
-    return { schema: 1, sessionId: a.sessionId, generation: e.generation, at: now, state, transitionedAt: this.transitionedAt, components, ports, inspection: { at: os.at, error: os.error, fresh: inspectionFresh }, lifecycle: { ...a.lifecycle },
-      audio: { state: audioState, device: e.currentDevice || "Not prepared", ...e.audioInfo, meterFresh: fresh, left: fresh ? m.l : null, right: fresh ? m.r : null, preview: project.preview.state, recording: project.recordingState?.state ?? "idle" },
+    return { schema: 1, platform: PLATFORM_NAME, sessionId: a.sessionId, generation: e.generation, at: now, state, transitionedAt: this.transitionedAt, components, ports, inspection: { at: os.at, error: os.error, fresh: inspectionFresh, available: !os.error }, lifecycle: { ...a.lifecycle },
+      audio: { state: audioState, capabilities: e.audioCapabilities, device: e.currentDevice || "Not prepared", ...e.audioInfo, meterFresh: fresh, left: fresh ? m.l : null, right: fresh ? m.r : null, preview: project.preview.state, recording: project.recordingState?.state ?? "idle" },
       project: { name: project.project.name, id: project.project.id, revision: project.project.revision, saved: a.savedState, appliedRevision: project.projectRuntime.appliedRevision, recovered: project.workspace.recovered, recoveryWarning: project.workspace.recoveryWarning },
       lastFault: e.lastFault, logCursor: this.logs.lastId };
   }

@@ -1,6 +1,6 @@
 // ============================================================================
 //  SuperDirt startup for the live-coding rig (psy / trap / heavy bass)
-//  Boots scsynth on FlexASIO -> FiiO K11, loads samples, opens 12 orbits,
+//  Boots the configured scsynth backend, loads samples, opens 12 orbits,
 //  and listens for Tidal on OSC port 57120.
 //
 //  HEADLESS-SAFE: uses Routine(...).play(SystemClock) -- NOT fork/waitForBoot,
@@ -13,6 +13,8 @@
 // breaks the whole file's compile (then scsynth never boots).
 if(~devFile.isNil) { ~devFile = "audio_device.txt" };  // real path injected by the MCP before .load
 ~dev = if(File.exists(~devFile)) { File.readAllString(~devFile).stripWhiteSpace } { "" };
+if(~dev.size == 0) { ~dev = ~abxDefaultDevice ? "SYSTEM" };
+if(~dev == "System default") { ~dev = "SYSTEM" };
 s = Server.default;
 // Report loss of the audio server even while the language interpreter stays alive.
 ServerQuit.add({ |server| if(server === s) { ("ABX_AUDIO_" ++ "EXIT").postln } });
@@ -20,7 +22,7 @@ ServerQuit.add({ |server| if(server === s) { ("ABX_AUDIO_" ++ "EXIT").postln } }
 // Node-spawned process lacks, so the DSP stays frozen. WASAPI drives this fine headless.
 // Output device is chosen by the dashboard (written to ~devFile): a device name =
 // use it; "SYSTEM" = let the OS pick (leave nil); empty/absent = the default below.
-if(~dev == "SYSTEM", {
+if((~dev == "SYSTEM") or: { ~abxJack == true }, {
     // leave s.options.device nil -> OS default device
 }, {
     if(~dev.size > 0,
@@ -30,8 +32,10 @@ if(~dev == "SYSTEM", {
 });
 s.options.numInputBusChannels = 0;       // synthesis only
 s.options.numOutputBusChannels = 2;
-s.options.sampleRate = 48000;
-s.options.hardwareBufferSize = 480;      // ~10ms; tighten via WASAPI exclusive later
+if(~abxWindows ? true) {
+    s.options.sampleRate = 48000;
+    s.options.hardwareBufferSize = 480;  // Preserve validated Windows configuration.
+}; // Linux inherits its audio server's rate/period; do not force Windows values.
 s.options.memSize = 8192 * 16;           // 128 MB realtime memory (room for reverbs/FX)
 s.options.numBuffers = 1024 * 256;       // enough buffers for the full sample library
 s.options.maxNodes = 1024 * 32;

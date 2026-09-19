@@ -21,6 +21,7 @@
     "runtime:stop": "node dist/runtime-control.js",
     "launch": "node dist/launcher.js --open",
     "selftest:system": "npm run build && node system-selftest.mjs",
+    "selftest:linux": "npm run build && node linux-runtime-selftest.mjs",
     "selftest:system:live": "npm run build && node system-live-selftest.mjs"
   },
   "engines": {

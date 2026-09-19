@@ -8,6 +8,7 @@ export function sanitizeLog(text: string): string {
     .replace(/\b(password|token|secret|api[_-]?key|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
     .replace(/\bsk-[\w-]+/g, "[redacted]")
     .replace(/[A-Z]:[\\/]Users[\\/][^\\/\s]+/gi, "[user]")
+    .replace(/\/home\/[^/\s]+|\/root(?=\/|\s|$)/g, "[user]")
     .replace(/[\x00-\x08\x0b-\x1f]/g, "").slice(0, 2048);
 }
 export class RuntimeLogs {

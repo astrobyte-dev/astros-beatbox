@@ -54,9 +54,13 @@ server.tool("hush", "Silence and clear Tidal patterns. Dashboard Stop instead ke
 server.tool("eval_sc", "Evaluate raw SuperCollider code. Acknowledgement covers the expression, not work it schedules for later.",
   { ...retry, code: z.string() }, async ({ code, ...meta }) => execute({ ...meta, cmd: "eval_sc", value: code }));
 server.tool("status", "Report the persistent runtime, engine health, recording catalog and canonical project.", async () => text(JSON.stringify(await state())));
-process.stdin.on("end", () => { clearInterval(heartbeat); void bridge(false).finally(() => { runtime.close(); void server.close(); }); });
-process.on("SIGINT", () => { runtime.close(); process.exit(0); });
-process.on("SIGTERM", () => { runtime.close(); process.exit(0); });
-process.on("exit", () => runtime.close());
+let closing: Promise<void> | undefined;
+function closeBridge() {
+  return closing ??= (async () => { clearInterval(heartbeat); await bridge(false); await runtime.close(); await server.close(); })().catch(e => { closing = undefined; process.stderr.write("Shutdown unconfirmed: " + String(e) + "\n"); process.exitCode = 1; });
+}
+process.stdin.on("end", () => { void closeBridge(); });
+process.on("SIGINT", () => { void closeBridge(); });
+process.on("SIGTERM", () => { void closeBridge(); });
+if (process.platform === "linux") process.on("SIGHUP", () => { void closeBridge(); });
 try { await server.connect(new StdioServerTransport()); }
-catch (e) { runtime.close(); process.stderr.write(String(e) + "\n"); process.exitCode = 1; }
+catch (e) { await closeBridge(); process.stderr.write(String(e) + "\n"); process.exitCode = 1; }
