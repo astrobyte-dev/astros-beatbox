@@ -26,7 +26,8 @@
     "selftest:linux": "npm run build && node linux-runtime-selftest.mjs",
     "selftest:system:live": "npm run build && node system-live-selftest.mjs",
     "selftest:p35b": "npm run build && node p35b-selftest.mjs",
-    "selftest:p4": "npm run build && node p4-selftest.mjs"
+    "selftest:p4": "npm run build && node p4-selftest.mjs",
+    "selftest:p5": "npm run build && node p5-selftest.mjs"
   },
   "engines": {
     "node": "24.14.0",
@@ -46,6 +47,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
+    "axe-core": "4.10.3",
     "playwright": "1.61.1",
     "typescript": "5.9.3",
     "vite": "8.2.2"

@@ -1,0 +1,142 @@
+{
+  "status": "passed",
+  "fixtures": "Synthetic audio only; native/Windows acceptance pending",
+  "accessibility": [
+    {
+      "name": "arrival-1440",
+      "violations": []
+    },
+    {
+      "name": "help",
+      "violations": []
+    },
+    {
+      "name": "studio-1440",
+      "violations": []
+    },
+    {
+      "name": "sounds-empty",
+      "violations": []
+    },
+    {
+      "name": "sound-lab-1440",
+      "violations": []
+    },
+    {
+      "name": "fx-1440",
+      "violations": []
+    },
+    {
+      "name": "motion-1440",
+      "violations": []
+    },
+    {
+      "name": "variation-1440",
+      "violations": []
+    },
+    {
+      "name": "jam-1440",
+      "violations": []
+    },
+    {
+      "name": "my-sounds-empty",
+      "violations": []
+    },
+    {
+      "name": "sampling-1440",
+      "violations": []
+    },
+    {
+      "name": "capture-recording",
+      "violations": []
+    },
+    {
+      "name": "capture-1440",
+      "violations": []
+    },
+    {
+      "name": "unsaved-switch",
+      "violations": []
+    },
+    {
+      "name": "save-error",
+      "violations": []
+    },
+    {
+      "name": "performance-1440",
+      "violations": []
+    },
+    {
+      "name": "recordings-1440",
+      "violations": []
+    },
+    {
+      "name": "degraded-1440",
+      "violations": []
+    },
+    {
+      "name": "system-degraded-1440",
+      "violations": []
+    },
+    {
+      "name": "system-1440",
+      "violations": []
+    },
+    {
+      "name": "missing-asset-1440",
+      "violations": []
+    },
+    {
+      "name": "waveform-error-1440",
+      "violations": []
+    },
+    {
+      "name": "reduced-motion-1280",
+      "violations": []
+    },
+    {
+      "name": "large-project-1280",
+      "violations": []
+    }
+  ],
+  "viewports": [
+    {
+      "width": 1024,
+      "height": 768,
+      "overflow": 0,
+      "padTop": 339.75
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "overflow": 0,
+      "padTop": 430.65625
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "overflow": 0,
+      "padTop": 435.3125
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "overflow": 0,
+      "padTop": 445.9375
+    }
+  ],
+  "performance": {
+    "tracks": 12,
+    "scenes": 16,
+    "clips": 138,
+    "fx": 13,
+    "automation": 78,
+    "assets": 13,
+    "chops": 8,
+    "ideas": 12,
+    "renderAfterNavigationMs": 48.253240000001824,
+    "idleTaskMs": 13.625,
+    "heapMiB": 29.403427124023438,
+    "projectListRequestsDuringIdle": 0
+  }
+}

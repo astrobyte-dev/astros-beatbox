@@ -104,7 +104,7 @@ export function Range({
     <label className="range-control">
       <span>
         {label}
-        <output>
+        <output aria-live="off">
           {Number((draft ?? value).toFixed(precision))}
           {unit}
         </output>
@@ -116,6 +116,7 @@ export function Range({
         max={max}
         step={step}
         value={draft ?? value}
+        aria-valuetext={`${Number((draft ?? value).toFixed(precision))}${unit}`}
         aria-disabled={disabled}
         onPointerDown={(e) => {
           if (disabled) e.preventDefault();
@@ -194,10 +195,23 @@ export function EditableText({
   );
 }
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    const query = matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(query.matches);
+    query.addEventListener("change", update);
+    update();
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
 export function ClockStrip({ playing }: { playing: boolean }) {
   const node = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
   useEffect(() => {
-    if (!playing) {
+    if (!playing || reduced) {
       if (node.current) node.current.style.opacity = "0";
       return;
     }
@@ -245,7 +259,7 @@ export function ClockStrip({ playing }: { playing: boolean }) {
       cancelAnimationFrame(frame);
       if (node.current) node.current.style.opacity = "0";
     };
-  }, [playing]);
+  }, [playing, reduced]);
   return (
     <div className="clock-strip" aria-hidden="true">
       <div ref={node} style={{ opacity: 0 }}>
@@ -277,7 +291,7 @@ export function Knob({ label, value, defaultValue, disabled, modulated, automate
       onKeyDown={e => { if (disabled) return; if (e.key === "Escape") { cancel(); return; } if (!["ArrowUp","ArrowRight","ArrowDown","ArrowLeft","Home","End"].includes(e.key)) return; e.preventDefault(); begin(); update(e.key === "Home" ? 0 : e.key === "End" ? 1 : held.current!.value + (["ArrowUp","ArrowRight"].includes(e.key) ? 1 : -1) * (e.shiftKey ? .001 : .01)); }} onKeyUp={e => { if (e.key !== "Escape") finish(); }}>
       <svg viewBox="0 0 100 100" aria-hidden="true"><circle className="knob-track" cx="50" cy="50" r="42" /><circle className="knob-arc" cx="50" cy="50" r="42" strokeDasharray={`${v * 198} 264`} transform="rotate(135 50 50)" /><circle className="knob-cap" cx="50" cy="50" r="32" /><path className="knob-pointer" d="M50 26v13" transform={`rotate(${-135 + v * 270} 50 50)`} /></svg>
     </div>
-    <output>{Math.round(v * 100)}<small>%</small></output>
+    <output aria-live="off">{Math.round(v * 100)}<small>%</small></output>
     <button className="knob-reset" aria-label={`Reset ${label}`} disabled={disabled} onClick={() => onCommit(defaultValue, client.base())}>Reset</button>
     {(modulated || automated) && <small className="knob-motion">{modulated && automated ? "◷ Auto · ↝ Mod" : modulated ? "↝ Modulated" : "◷ Automated"}</small>}
   </div>;

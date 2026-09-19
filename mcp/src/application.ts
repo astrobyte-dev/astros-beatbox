@@ -71,7 +71,7 @@ export class Application {
   private lifecyclePending = false;
   readonly lifecycle = { action: null as string | null, phase: "idle", at: Date.now(), error: null as string | null };
   lifecycleHooks: { restartServices?: () => Promise<void>; quit?: () => Promise<void>; log?: (source: "runtime" | "recording", message: string, error?: boolean) => void } = {};
-  private savedProject: { id: string; revision: number } | null = null;
+  private savedProject: { id: string; revision: number; name: string } | null = null;
   get savedState() { const p = this.project.document; return this.savedProject?.id === p.id && this.savedProject.revision === p.revision ? "saved" : "unsaved"; }
   readonly performance = emptyPerformance();
   private performanceDocument: ProjectDocument | null = null;
@@ -97,7 +97,7 @@ export class Application {
       this.rig.recording = false;
     }
     if (this.jamTake?.active && this.jamTake.generation !== this.engine.generation) this.jamTake.active = false;
-    return { jam: { capture: this.jamTake ? clone(this.jamTake) : null, trail: this.jamTrail.inspect(document), summary: this.jamSummaryRevision === document.revision ? this.jamSummary : null, capabilities: jamCapabilities(document), verbs }, project: document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.assetStates(), capture: this.capture.snapshot(), input: { configuration: this.engine.inputConfiguration ?? null, devices: this.engine.inputDevices ?? [], enumeration: !!this.engine.audioCapabilities?.deviceSelection, explanation: this.engine.audioCapabilities?.configuration ?? "Input device enumeration unavailable in this backend" }, preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
+    return { persistence: { state: this.savedState, name: this.savedProject?.id === document.id ? this.savedProject.name : null }, jam: { capture: this.jamTake ? clone(this.jamTake) : null, trail: this.jamTrail.inspect(document), summary: this.jamSummaryRevision === document.revision ? this.jamSummary : null, capabilities: jamCapabilities(document), verbs }, project: document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.assetStates(), capture: this.capture.snapshot(), input: { configuration: this.engine.inputConfiguration ?? null, devices: this.engine.inputDevices ?? [], enumeration: !!this.engine.audioCapabilities?.deviceSelection, explanation: this.engine.audioCapabilities?.configuration ?? "Input device enumeration unavailable in this backend" }, preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
   }
   private assetStates(p = this.project.document) {
     return this.project.assets(this.paths.samples, p).map(a => {
@@ -361,11 +361,11 @@ export class Application {
     }
     if (c.cmd === "project.edit") { await this.changeProject(this.project.prepare(c.edits), c, id); for (const e of c.edits!) if (e.type === "scene.activate") this.project.workspace.selectedSceneId = e.sceneId; return { msg: c.label! }; }
     if (c.cmd === "project.undo" || c.cmd === "project.redo") { const redo = c.cmd === "project.redo"; await this.changeProject(this.project.historyTarget(redo), c, id, redo ? "redo" : "undo"); return { msg: redo ? "Redone" : "Undone" }; }
-    if (c.cmd === "project.save") { if (!this.project.storage) throw new Error("Project storage not configured"); this.project.storage.save(String(c.value), this.project.document); this.savedProject = { id: this.project.document.id, revision: this.project.document.revision }; return { msg: "Saved complete project: " + c.value }; }
+    if (c.cmd === "project.save") { if (!this.project.storage) throw new Error("Project storage not configured"); this.project.storage.save(String(c.value), this.project.document); this.savedProject = { id: this.project.document.id, revision: this.project.document.revision, name: String(c.value) }; return { msg: "Saved complete project: " + c.value }; }
     if (["project.load", "project.new", "project.recover"].includes(c.cmd)) {
       const next = c.cmd === "project.new" ? emptyProject() : c.cmd === "project.recover" ? this.project.storage?.recover() : this.project.storage?.load(String(c.value));
       if (!next) throw new Error("No recoverable project available");
-      await this.changeProject(this.project.switchTarget(next), c, id, "switch"); this.savedProject = c.cmd === "project.load" ? { id: this.project.document.id, revision: this.project.document.revision } : null; return { msg: "Project opened" };
+      await this.changeProject(this.project.switchTarget(next), c, id, "switch"); this.savedProject = c.cmd === "project.load" ? { id: this.project.document.id, revision: this.project.document.revision, name: String(c.value) } : null; return { msg: "Project opened" };
     }
     if (c.cmd === "song.start" || c.cmd === "song.stop") {
       if (c.cmd === "song.start" && !this.project.document.arrangement.length) throw new Error("Add scenes to the song chain first");

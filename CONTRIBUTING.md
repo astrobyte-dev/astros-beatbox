@@ -36,6 +36,21 @@ sets/*.tidal               saved jams
 
 ## Dev workflow
 
+P5 is stacked on `feat/p4-jam-exploration`. Read the
+[Product Finish report](docs/p5-product-finish.md) and [audit](docs/p5-product-audit.md).
+`npm run selftest:p5` runs production Studio/HTTP/storage/System with explicit
+synthetic audio, a horizontal creative journey, axe accessibility checks and a
+12-track/16-scene stress fixture. It writes only `docs/p5-after/` and
+`docs/p5-validation.json`. It is included in CI. No physical audio acceptance is
+implied. Preserve earlier phase screenshots if their regression harnesses regenerate
+them. See the report for review rules and the retained classic capability gaps.
+
+Studio reads `persistence` from Application; do not invent a browser dirty-document
+model. Tip preferences are browser-only and musical edits still use the original
+immutable revision/session base. The clock strip must not animate under reduced
+motion. Keep the explicit keyboard/text/dialog exclusions and focus restoration.
+
+
 P4 is stacked on `feat/p3.5b-capture-sampling`. Read the
 [Jam & Exploration report](docs/p4-jam-exploration.md) for locks, held offsets,
 source capabilities, macro composition, inert snapshot history and event-notebook
@@ -182,3 +197,22 @@ SC/Tidal compilation, sound quality or node lifetime. Preserve the pending gates
 and documented limitations in [the P3.5A report](docs/p35-sound-lab-core.md).
 SC binary operators share precedence: parenthesize modulation and dry/wet products.
 String membership uses `includesEqual`, not identity-based `includes`.
+
+## Native compiler regressions
+
+After building, run `node tidal-native-selftest.mjs` and
+`node sclang-native-selftest.mjs` from `mcp`, sequentially with the audio rig idle.
+These opt-in checks require the installed interpreters; they are separate from
+the portable test suite and do not establish audible musical quality.
+
+The Tidal check executes the actual boot helper, managed-code preparation,
+negative sample/modulation/macro arguments, cycle/immediate installation and
+compiler-error recovery. Cabal environments may hide transitive packages, so
+BootTidal exposes its imports before creating the stream. Generated multiline
+actions use explicit Haskell layout, and negative function arguments use parentheses.
+
+The SC check executes 9 KB and 70 KB source, asynchronous completion, a compiler
+failure and a subsequent command, then checks temporary-file cleanup. Large inline
+`.compile` string literals can be truncated by SC's lexer. The driver compiles
+oversized commands from a private temporary file with the same framed acknowledgements
+and SystemClock barriers, retaining the file until the queued operation completes.

@@ -2,7 +2,7 @@ import { client, useProject } from "./session";
 
 export function Recordings() {
   const state = useProject()!;
-  return <div className="library-content recording-library">
+  return <div className="library-content recording-library" tabIndex={-1}>
     <span className="eyebrow">YOU MADE THESE</span><h3>Your recordings</h3>
     <p>Saved on this computer. Kept when you Undo or open another jam.</p>
     {state.recordingWarning && <p role="alert">{state.recordingWarning}</p>}

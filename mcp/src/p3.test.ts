@@ -7,7 +7,16 @@ import { Application, type CommandEngine } from "./application.js";
 import { applyEdits, emptyProject, type ProjectEdit } from "./project.js";
 import { pocketGroove } from "./studio-starter.js";
 import { compileClip, compileTrack, compileArrangement } from "./project-compiler.js";
-import { nextBoundary, arrangementPosition, preparedBatch, sceneProjection } from "./performance.js";
+import { nextBoundary, arrangementPosition, preparedBatch, sceneProjection, parseCycle } from "./performance.js";
+
+test("P3 native GHCi clock and scheduling output may follow the interactive prompt", () => {
+  assert.equal(parseCycle("tidal> ABX_CLOCK -7.61105e-2\r\n\ntidal>", "ABX_CLOCK"), -0.0761105);
+  assert.equal(parseCycle("tidal> ABX_SCHEDULED 12\r\n", "ABX_SCHEDULED"), 12);
+  assert.equal(parseCycle("ABX_CLOCK 1.25\n", "ABX_CLOCK"), 1.25);
+  for (const output of ['putStrLn "ABX_CLOCK 12"', "other ABX_CLOCK 12", "ABX_CLOCK Infinity", "ABX_CLOCK 12 trailing"]) {
+    assert.throws(() => parseCycle(output, "ABX_CLOCK"));
+  }
+});
 
 class ClockEngine implements CommandEngine {
   generation = 0; running = false; state = "idle"; error = null;

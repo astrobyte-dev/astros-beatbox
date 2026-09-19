@@ -1,5 +1,9 @@
 :set -fno-warn-orphans -Wno-type-defaults -XMultiParamTypeClasses -XOverloadedStrings
 :set prompt ""
+-- Cabal's package environment exposes tidal, but not its transitive dependencies.
+-- Expose helper imports before creating the stream: changing packages later
+-- unloads the interactive bindings, including the running Tidal instance.
+:set -package containers -package tidal-core
 
 import Sound.Tidal.Boot
 import qualified Control.Exception
@@ -40,10 +44,11 @@ let abxPrepare :: ControlPattern -> IO ()
         pending <- ABXRef.readIORef abxPending
         let start = if quantized then fromIntegral (floor now + 1 :: Integer) else now
             transition pat previous = if quantized then ABXTransition.jumpIn' 0 now [pat, previous] else pat
-            entry (key, pat) = let previous = ABXMap.findWithDefault (ABXStream.PlayState silence False False []) key old
-                                  audible = if maybe False (now >=) pending then case ABXStream.psHistory previous of { pat0 : _ -> pat0; [] -> ABXStream.psPattern previous } else ABXStream.psPattern previous
-                                  routed = withQueryControls (ABXMap.insert patternTimeID (VR start)) (pat # pS "_id_" (pure key))
-                              in (key, previous { ABXStream.psPattern = transition routed audible, ABXStream.psHistory = [routed], ABXStream.psMute = False, ABXStream.psSolo = False })
+            entry (key, pat) =
+              let previous = ABXMap.findWithDefault (ABXStream.PlayState silence False False []) key old
+                  audible = if maybe False (now >=) pending then case ABXStream.psHistory previous of { pat0 : _ -> pat0; [] -> ABXStream.psPattern previous } else ABXStream.psPattern previous
+                  routed = withQueryControls (ABXMap.insert patternTimeID (VR start)) (pat # pS "_id_" (pure key))
+              in (key, previous { ABXStream.psPattern = transition routed audible, ABXStream.psHistory = [routed], ABXStream.psMute = False, ABXStream.psSolo = False })
             entries = map entry (build start)
         mapM_ (abxPrepare . ABXStream.psPattern . snd) entries
         checked <- getnow

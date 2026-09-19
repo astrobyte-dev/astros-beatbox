@@ -309,3 +309,58 @@ test("studio production files and legacy coexist with CSP, strict asset paths an
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+// P5 persistence observations must come from completed server writes, across clients.
+test("Studio observes save, edit, save-as and reopened filename without owning disk state", async () => {
+  const f = fixture();
+  try {
+    const client = new StudioClient(f.request); await client.refresh();
+    assert.deepEqual(client.getSnapshot()!.persistence, { state: "unsaved", name: null });
+    await client.edit(pocketGroove(f.app.project.document), "Start");
+    await client.command({ cmd: "project.save", value: "first-name" }, "Save jam");
+    assert.deepEqual(client.getSnapshot()!.persistence, { state: "saved", name: "first-name" });
+    assert.equal((await f.app.dispatch({ cmd: "project.edit", projectId: f.app.project.document.id, revision: f.app.project.document.revision, edits: [{ type: "project.rename", name: "Different title" }], label: "External rename" })).ok, true);
+    await client.refresh();
+    assert.deepEqual(client.getSnapshot()!.persistence, { state: "unsaved", name: "first-name" });
+    await client.command({ cmd: "project.save", value: "second-name" }, "Save jam");
+    await client.command({ cmd: "project.new" }, "New jam");
+    assert.deepEqual(client.getSnapshot()!.persistence, { state: "unsaved", name: null });
+    await client.command({ cmd: "project.load", value: "first-name" }, "Open jam");
+    assert.deepEqual(client.getSnapshot()!.persistence, { state: "saved", name: "first-name" });
+    assert.equal(f.app.rig.stopped, true);
+  } finally { f.close(); }
+});
+
+test("Failed and stale saves cannot claim the current jam is saved", async () => {
+  const f = fixture();
+  try {
+    const client = new StudioClient(f.request); await client.refresh();
+    await client.edit(pocketGroove(f.app.project.document), "Start");
+    const base = client.base();
+    await client.edit([{ type: "project.rename", name: "Still here" }], "Rename");
+    assert.equal(await client.command({ cmd: "project.save", value: "stale" }, "Save jam", base), false);
+    assert.equal(f.app.savedState, "unsaved");
+    const original = f.app.project.storage!.save;
+    f.app.project.storage!.save = () => { throw new Error("Fixture disk full"); };
+    assert.equal(await client.command({ cmd: "project.save", value: "failed" }, "Save jam"), false);
+    assert.equal(client.getSnapshot()!.persistence!.state, "unsaved");
+    assert.equal(f.app.project.document.name, "Still here");
+    assert.deepEqual(f.app.project.storage!.list(), []);
+    f.app.project.storage!.save = original;
+    assert.equal(await client.command({ cmd: "project.save", value: "recovered" }, "Save jam"), true);
+    assert.equal(client.getSnapshot()!.persistence!.state, "saved");
+  } finally { f.close(); }
+});
+
+test("Telemetry-only polling preserves Studio identity and does not notify subscribers", async () => {
+  const f = fixture();
+  try {
+    let meter = 0;
+    const client = new StudioClient(async () => new Response(JSON.stringify({ ...f.snapshot(), meterL: ++meter, hits: {d1: meter}, scopes: {d1: Array(512).fill(meter)} })));
+    await client.refresh(); const snapshot = client.getSnapshot(); let notifications = 0;
+    const dispose = client.subscribe(() => notifications++);
+    for (let i = 0; i < 100; i++) await client.refresh();
+    assert.equal(client.getSnapshot(), snapshot); assert.equal(notifications, 0);
+    dispose(); await client.refresh(); assert.equal(notifications, 0);
+  } finally { f.close(); }
+});

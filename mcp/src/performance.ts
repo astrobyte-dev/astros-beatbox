@@ -48,13 +48,14 @@ export function preparedBatch(slots: Record<string, string>, boundary: Boundary,
     }
     return `("${i + 1}", (${body}\n))`;
   });
-  return `do\n  abxInstall ${boundary === "cycle" ? "True" : "False"} (\\abxStart -> [${rows.join(",\n    ")}])`;
+  return `do { abxInstall ${boundary === "cycle" ? "True" : "False"} (\\abxStart -> [${rows.join(",\n    ")}]) }`;
 }
 export function preparedCode(source: string): string {
-  return `do\n  abxPrepare (${source}\n)`;
+  return `do { abxPrepare (${source}\n) }`;
 }
 export function parseCycle(output: string, marker: "ABX_SCHEDULED" | "ABX_CLOCK"): number {
-  const match = output.match(new RegExp("(?:^|\\n)" + marker + " ([0-9.eE+\\-]+)(?:\\r?\\n|$)"));
+  // Interactive GHCi writes its prompt without a newline before action output.
+  const match = output.match(new RegExp("(?:^|\\n)(?:tidal> )?" + marker + " ([0-9.eE+\\-]+)(?:\\r?\\n|$)"));
   const value = match ? Number(match[1]) : NaN;
   if (!Number.isFinite(value)) throw new Error("Tidal did not confirm its musical clock");
   return value;
