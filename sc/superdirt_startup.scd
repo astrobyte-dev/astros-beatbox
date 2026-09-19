@@ -30,7 +30,8 @@ if((~dev == "SYSTEM") or: { ~abxJack == true }, {
         { /* empty/absent -> OS default device; pick a "Windows WASAPI : <output>" in the dashboard for reliable headless audio */ }
     );
 });
-s.options.numInputBusChannels = 0;       // synthesis only
+s.options.numInputBusChannels = ~abxInputChannels ? 0; // enabled only by explicit Capture preparation
+if((~abxInputDevice ? "").size > 0 and: { ~abxJack != true }) { s.options.inDevice = ~abxInputDevice };
 s.options.numOutputBusChannels = 2;
 if(~abxWindows ? true) {
     s.options.sampleRate = 48000;

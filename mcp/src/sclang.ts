@@ -26,7 +26,7 @@ export class Sclang extends ProcDriver {
   }
 
   /** Boot scsynth + SuperDirt and wait until it's listening on :57120. */
-  async bootSuperDirt(timeoutMs = 120000): Promise<void> {
+  async bootSuperDirt(timeoutMs = 120000, input = { enabled: false, device: "" }): Promise<void> {
     await this.waitFor(SC_WELCOME, 60000); // class library compiled, interpreter live
     // Use .load (not raw stdin eval): sending the multi-line file via stdin+form-feed
     // mis-parses `var`/comments; .load compiles the whole file like the IDE does.
@@ -34,7 +34,7 @@ export class Sclang extends ProcDriver {
     // tell the startup where the audio-device file lives (keeps the user's path out
     // of the committed .scd; the .scd uses ~devFile if set, else a relative fallback).
     const dev = AUDIO_DEVICE_FILE.replace(/\\/g, "/");
-    const setup = `~abxJack = ${AUDIO_CAPABILITIES.backend === "jack"}; ~abxWindows = ${process.platform === "win32"}; ~abxDefaultDevice = "${scStr(DEFAULT_AUDIO_DEVICE)}"; `;
+    const setup = `~abxInputChannels = ${input.enabled ? 2 : 0}; ~abxInputDevice = "${scStr(input.device)}"; ~abxJack = ${AUDIO_CAPABILITIES.backend === "jack"}; ~abxWindows = ${process.platform === "win32"}; ~abxDefaultDevice = "${scStr(DEFAULT_AUDIO_DEVICE)}"; `;
     const server = SCSYNTH ? `Server.program = "${scStr(SCSYNTH.replace(/\\/g, "/"))}"; ` : "";
     await this.eval(setup + server + `~devFile = "${scStr(dev)}"; ~samplePath = "${scStr(DIRT_SAMPLES_DIR.replace(/\\/g, "/"))}/*"; "${scStr(path)}".load;`);
     await this.waitFor(SUPERDIRT_READY, timeoutMs);

@@ -1763,3 +1763,50 @@ input[aria-disabled="true"] {
 .sound-lab .lab-tabs button[aria-pressed=true] { background:#3b414b; }
 .rack-unit .knob-bank { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:24px; padding-top:20px; }
 .rack-unit .knob-control { width:112px; }
+/* Capture & Sampling: waveform-led tools within the existing Studio surfaces. */
+.user-sounds h3, .capture-panel h3 { font-family: Outfit, sans-serif; font-size: 1.6rem; line-height: 1.1; }
+.user-sounds label, .capture-panel label, .sound-details label { display: grid; gap: .35rem; margin: .6rem 0; font-size: .8rem; }
+.user-sounds input, .user-sounds select, .capture-panel input, .capture-panel select, .slice-lab select { width: 100%; min-width: 0; padding: .5rem; border: 1px solid #cfc8b9; border-radius: 6px; background: #fffdf6; color: #292e2b; }
+.sample-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; align-items: center; }
+.sample-actions button { flex: 1 1 auto; }
+.user-sound-card, .capture-take, .import-review { margin: .8rem 0; padding: .85rem; background: #fffdf6; border: 1px solid #d7d1c3; border-radius: 10px; }
+.user-sound-card h4, .capture-take h4 { margin: .4rem 0; overflow-wrap: anywhere; font-size: 1.05rem; }
+.user-sound-card small, .capture-panel small, .import-review small, .user-sounds > small { display: block; line-height: 1.5; color: #596056; }
+.sample-wave { display: block; width: 100%; height: 70px; color: #347b65; background: #e8eee3; border-radius: 6px; margin: .6rem 0; }
+.import-progress { overflow-wrap: anywhere; font-size: .8rem; }
+.sound-details { font-size: .8rem; margin-top: .6rem; }
+.sound-details summary { cursor: pointer; }
+.capture-record { width: 100%; min-height: 54px; margin: .8rem 0; }
+.input-meter { padding: .8rem; background: #21342e; color: #daeed9; border-radius: 8px; display: grid; gap: .5rem; font-size: .8rem; }
+.input-meter meter { width: 100%; height: 20px; }
+.sample-editor { padding: 1.5rem; color: #e8ecdf; }
+.sample-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.sample-heading h3 { overflow-wrap: anywhere; margin: .4rem 0; }
+.sample-heading p, .sample-editor p, .trim-modes small { color: #c2cdbf; font-size: .85rem; }
+.sample-editor button, .sample-editor summary { color: #e8ecdf; }
+.sample-editor button { background: #35463e; border: 1px solid #627568; border-radius: 6px; padding: .6rem .8rem; }
+.sample-editor button[aria-pressed=true] { background: #d5ead5; color: #1d3529; }
+.trim-modes { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: 1rem; }
+.trim-wave { touch-action: none; cursor: crosshair; }
+.trim-wave .sample-wave { height: 160px; background: #192a24; color: #a9d6b2; }
+.sample-control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.sample-editor .range-control { color: #e8ecdf; }
+.slice-lab { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #536557; }
+.slice-lab h3 span { color: #abdcb2; margin-left: .5rem; }
+.chop-pads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin: 1rem 0; }
+.chop-pad { min-width: 0; background: #283e32; padding: .5rem; border-radius: 8px; }
+.chop-pad > button:first-child { display: grid; width: 100%; min-height: 85px; text-align: left; background: #d5ead5; color: #193124; }
+.chop-pad b { font-family: Outfit, sans-serif; font-size: 1.5rem; }
+.chop-pad small { color: #365541; }
+.chop-pad > button:not(:first-child) { font-size: .7rem; padding: .35rem; margin-top: .4rem; }
+.chop-pad summary { margin-top: .5rem; font-size: .7rem; }
+.slice-sequence { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; }
+.slice-sequence label { min-width: 0; font-size: .75rem; }
+@media (max-width: 1100px) { .chop-pads, .slice-sequence { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.instrument-name > span, .track-select small { overflow-wrap: anywhere; }
+.sample-heading > div { min-width: 0; }
+
+.sound-lab .sample-editor button[aria-pressed=true],
+.sound-lab .sample-editor .chop-pad > button:first-child { background-color: #d5ead5; color: #193124; }
+.sound-lab .sample-editor .chop-pad > button:first-child:hover { background-color: #e3f3df; }

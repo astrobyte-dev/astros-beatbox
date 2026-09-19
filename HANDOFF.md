@@ -2,21 +2,24 @@
 
 Updated 2026-09-07 (Australia/Hobart). **P2.5 is complete and accepted.**
 Current portability task: **P2.6, Level B validated on Ubuntu; Windows gate pending**.
-Active feature work: **P3.5A — Sound Lab Core**, on
-`feat/p3.5a-sound-lab-core`, based on exact P3 head
-`7f5971ab603c33f893071839c5880b57ed8569f1`.
-See [the Sound Lab implementation and completion report](docs/p35-sound-lab-core.md)
-and [TASK-3.5A](tasks/TASK-3.5A.md). Initial implementation and portable validation
-are complete, including P3 semantic automation for 14 insert FX controls with
-independent base/modulation ownership. Additional validation: 256 passed, 3 Windows
-skips (259 total), P3/P3.5A browser journeys and real MCP synchronization. Native
-synthesis/audio/CPU/timing acceptance remains pending.
-The P3.5A draft targets `feat/p3-composition-performance`, not main.
-P3 remains implementation complete with native audio/timing acceptance pending;
-see [P3 report](docs/p3-composition-performance.md). P2.6 and P3 remain unmerged
-draft dependencies. P2.6 remains Ubuntu Runtime Safe with Windows revalidation
-pending. No native or Windows gate was closed. Do not begin P3.5B/P4/P5 or merge
-any of these stacked drafts as part of Sound Lab delivery.
+Active feature work: **P3.5B — Capture & Sampling Lab**, on
+`feat/p3.5b-capture-sampling`, based on exact P3.5A head
+`3ea7f7b4441bdd456c83699f9a170c9e6c9a56d9`.
+See [the Capture & Sampling implementation/completion report](docs/p35b-capture-sampling.md)
+and [TASK-3.5B](tasks/TASK-3.5B.md). Implementation and available portable validation
+are complete: **301 passed, 3 Windows-only skips (304 total)**, production build,
+both typechecks, seven browser journeys, real MCP synchronization and Linux runtime
+lifecycle. The Capture creative workflow uses explicit synthetic audio fixtures.
+Native microphone/audio/timing/CPU acceptance remains pending.
+The P3.5B draft targets `feat/p3.5a-sound-lab-core`, not main.
+
+P3.5A remains implementation complete; see [Sound Lab Core](docs/p35-sound-lab-core.md).
+P3 remains implementation complete; see [composition/performance](docs/p3-composition-performance.md).
+All inherited gates remain open: P2.6 Windows desktop/audio; P3 native audio/timing
+and Windows; P3.5A native audio/timing/CPU and Windows. P3.5B adds its own native
+input/audio and Windows gate. P2.6 remains Ubuntu Level B Runtime Safe.
+No native or Windows gate was closed and no system/audio packages were changed.
+Do not begin P4/P5 or merge any stacked drafts as part of P3.5B delivery.
 
 ## Checkpoint
 

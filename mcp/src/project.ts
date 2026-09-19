@@ -1,3 +1,4 @@
+import { samplePlaybackSchema, sliceSchema, audioMetadataSchema } from "./sampling.js";
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { sourceSchema, effectSchema, routeSchema, patchSchema, definition, validateValues, targetDefinition } from "./sound-lab.js";
@@ -12,10 +13,10 @@ const params = z.record(parameterSchema, finite).superRefine((p, ctx) => {
   for (const [k, v] of Object.entries(p)) { const [lo, hi] = ranges[k as Parameter]; if (v! < lo || v! > hi) ctx.addIssue({ code: "custom", message: "Parameter out of range: " + k }); }
 });
 const mixerSchema = z.object({ level: finite.min(0).max(2), balance: finite.min(-1).max(1), mute: z.boolean(), solo: z.boolean() }).strict();
-const assetSchema = z.object({ id, kind: z.enum(["sample", "synth", "file"]), reference: z.string().min(1).max(2048), name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), index: z.number().int().min(0).max(65535), source: z.object({ library: z.string().min(1).max(100), origin: z.enum(["bundled", "external"]), file: z.string().regex(/^[a-zA-Z0-9_-]+\/[^/\\\x00-\x1f]+$/).max(1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict();
+const assetSchema = z.object({ id, kind: z.enum(["sample", "synth", "file"]), reference: z.string().min(1).max(2048), name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(100), index: z.number().int().min(0).max(65535), source: z.object({ library: z.string().min(1).max(100), origin: z.enum(["bundled", "external", "user", "captured"]), file: z.string().regex(/^[a-zA-Z0-9_-]+\/[^/\\\x00-\x1f]+$/).max(1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(), audio: audioMetadataSchema.optional() }).strict();
 const clipBase = { id, trackId: id, name: z.string().max(120) };
 export const clipSchema = z.discriminatedUnion("kind", [
-  z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), notes: z.array(finite.int().min(0).max(127)).min(1).max(128).optional(), octave: z.number().int().min(-4).max(4).optional(), parameters: params }).strict(),
+  z.object({ ...clipBase, kind: z.literal("steps"), assetId: id, steps: z.array(finite.min(0).max(1.5)).min(1).max(128), swing: finite.min(0).max(0.5), playback: samplePlaybackSchema.optional(), slices: z.array(sliceSchema).max(16).optional(), sliceSteps: z.array(id.nullable()).min(1).max(128).optional(), notes: z.array(finite.int().min(0).max(127)).min(1).max(128).optional(), octave: z.number().int().min(-4).max(4).optional(), parameters: params }).strict(),
   z.object({ ...clipBase, kind: z.literal("code"), source: z.string().min(1).max(65536), managed: z.boolean(), draft: z.string().max(65536).optional(), dependencyIds: z.array(id).max(128) }).strict(),
 ]);
 export const automationSchema = z.object({ id, trackId: id, clipId: id.nullable(), parameter: z.union([parameterSchema, z.string().regex(/^(synth\.[a-z][a-z0-9]*|fx\.[a-zA-Z0-9_-]+\.[a-z][a-z0-9]*)$/)]), enabled: z.boolean(), bars: z.number().int().min(1).max(64), values: z.array(finite.min(0).max(1)).min(2).max(128) }).strict();
@@ -45,6 +46,9 @@ export function emptyProject(name = "Untitled"): ProjectDocument {
 export function validateProject(value: unknown): ProjectDocument {
   if (JSON.stringify(value).length > 4 * 1024 * 1024) throw new Error("Project exceeds 4 MiB limit");
   const p = documentSchema.parse(value);
+  for (const a of p.assets) if (a.source?.origin === "user" || a.source?.origin === "captured") {
+    if (a.source.library !== "Beatbox" || a.id !== "audio_" + a.source.sha256 || a.name !== "abx_" + a.source.sha256 || a.source.file !== "audio/" + a.id + ".wav" || a.index !== 0 || a.kind !== "sample" || !a.audio) throw new Error("Invalid managed audio identity");
+  }
   for (const a of p.assets) if (a.kind === "sample" && a.reference !== a.name) throw new Error("Sample library references must match their registered sound name");
   const unique = (xs: string[], label: string) => { if (new Set(xs).size !== xs.length) throw new Error("Duplicate " + label); };
   unique([p.id, ...p.tracks.map(t => t.id), ...p.clips.map(c => c.id), ...p.scenes.map(s => s.id), ...p.assets.map(a => a.id), ...p.automation.map(a => a.id), ...p.dependencies.map(d => d.id), ...p.arrangement.map(a => a.id), ...p.sources.map(s => s.id), ...p.tracks.flatMap(t => [...(t.effects ?? []).map(e => e.id), ...(t.modulation ?? []).map(m => m.id)]), ...(p.patches ?? []).map(p => p.id)], "identity");
@@ -72,6 +76,10 @@ export function validateProject(value: unknown): ProjectDocument {
     ref(c.trackId, c.id);
     const source = p.tracks.find(t => t.id === c.trackId)!.source;
     if (source?.type === "synth" && c.kind !== "steps" || source?.type === "code" && c.kind !== "code") throw new Error("Clip does not match track source type");
+    if (c.kind === "steps") {
+      unique((c.slices ?? []).map(s => s.id), "slice identity");
+      if (c.sliceSteps && (c.sliceSteps.length !== c.steps.length || c.sliceSteps.some(id => id !== null && !c.slices?.some(s => s.id === id)))) throw new Error("Invalid slice pad mapping");
+    }
     if (c.kind === "steps" && c.notes && c.notes.length !== c.steps.length) throw new Error("One note is required per rhythm step");
     if (c.kind === "steps" && !p.assets.some(a => a.id === c.assetId)) throw new Error("Invalid asset reference");
     if (c.kind === "code" && c.dependencyIds.some(d => !p.dependencies.some(x => x.id === d))) throw new Error("Invalid dependency reference");
@@ -85,6 +93,8 @@ export function validateProject(value: unknown): ProjectDocument {
 }
 
 export const editSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("sample.playback"), clipId: id, playback: samplePlaybackSchema }).strict(),
+  z.object({ type: z.literal("sample.slices"), clipId: id, slices: z.array(sliceSchema).max(16), sliceSteps: z.array(id.nullable()).min(1).max(128) }).strict(),
   z.object({ type: z.literal("source.set"), trackId: id, source: sourceSchema }).strict(),
   z.object({ type: z.literal("synth.parameter"), trackId: id, parameter: z.string(), value: finite.min(0).max(1) }).strict(),
   z.object({ type: z.literal("notes.set"), clipId: id, notes: z.array(finite.int().min(0).max(127)).min(1).max(128), octave: z.number().int().min(-4).max(4) }).strict(),
@@ -135,6 +145,8 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
   const put = <T extends {id: string}>(xs: T[], x: T) => { const i = xs.findIndex(y => y.id === x.id); if (i < 0) xs.push(clone(x)); else xs[i] = clone(x); };
   const removeClip = (id: string) => { p.clips = p.clips.filter(c => c.id !== id); p.automation = p.automation.filter(a => a.clipId !== id); for (const t of p.tracks) if (t.activeClipId === id) t.activeClipId = null; for (const s of p.scenes) for (const t of Object.keys(s.clips)) if (s.clips[t] === id) s.clips[t] = null; };
   for (const e of edits) switch (e.type) {
+    case "sample.playback": steps(e.clipId).playback = clone(e.playback); break;
+    case "sample.slices": { const c = steps(e.clipId); c.slices = clone(e.slices); c.sliceSteps = clone(e.sliceSteps); break; }
     case "source.set": { const t = track(e.trackId); t.source = clone(e.source); t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("synth.") || !!targetDefinition(t, m.target)); p.automation = p.automation.filter(a => a.trackId !== t.id || !a.parameter.startsWith("synth.") || !!targetDefinition(t, a.parameter)); break; }
     case "synth.parameter": { const t = track(e.trackId); if (t.source?.type !== "synth" || !targetDefinition(t, "synth." + e.parameter)) throw new Error("Unsupported synth parameter"); t.source.values[e.parameter] = e.value; delete t.source.presetId; break; }
     case "notes.set": { const c = steps(e.clipId); c.notes = e.notes; c.octave = e.octave; break; }
@@ -152,8 +164,8 @@ export function applyEdits(document: ProjectDocument, input: unknown): ProjectDo
     case "clip.put": { const old = p.clips.find(c => c.id === e.clip.id); if (old && old.trackId !== e.clip.trackId) throw new Error("Clip ownership is stable"); put(p.clips, e.clip); break; }
     case "clip.delete": if (!p.clips.some(c => c.id === e.clipId)) throw new Error("Unknown clip"); removeClip(e.clipId); break;
     case "clip.activate": track(e.trackId).activeClipId = e.clipId; break;
-    case "steps.set": { const c = steps(e.clipId); c.steps = e.steps; if (c.notes) c.notes = e.steps.map((_, i) => c.notes![i] ?? 36); break; }
-    case "sound.set": { const c = steps(e.clipId), t = track(c.trackId); c.assetId = e.assetId; if (t.source?.type === "synth") { t.source = { type: "sample" }; t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("synth.")); p.automation = p.automation.filter(a => a.trackId !== t.id || !a.parameter.startsWith("synth.")); } break; }
+    case "steps.set": { const c = steps(e.clipId); c.steps = e.steps; if (c.sliceSteps) c.sliceSteps = e.steps.map((_, i) => c.sliceSteps![i] ?? null); if (c.notes) c.notes = e.steps.map((_, i) => c.notes![i] ?? 36); break; }
+    case "sound.set": { const c = steps(e.clipId), t = track(c.trackId); c.assetId = e.assetId; delete c.slices; delete c.sliceSteps; delete c.playback; if (t.source?.type === "synth") { t.source = { type: "sample" }; t.modulation = (t.modulation ?? []).filter(m => !m.target.startsWith("synth.")); p.automation = p.automation.filter(a => a.trackId !== t.id || !a.parameter.startsWith("synth.")); } break; }
     case "swing.set": steps(e.clipId).swing = e.value; break;
     case "parameter.set": if (e.value === null) delete steps(e.clipId).parameters[e.parameter]; else steps(e.clipId).parameters[e.parameter] = e.value; break;
     case "mixer.set": Object.assign(track(e.trackId).mixer, e.values); break;

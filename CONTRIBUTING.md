@@ -36,6 +36,17 @@ sets/*.tidal               saved jams
 
 ## Dev workflow
 
+P3.5B is stacked on `feat/p3.5a-sound-lab-core`. Read the
+[Capture & Sampling report](docs/p35b-capture-sampling.md) for storage, routing,
+limits and pending native input/audio gates. `npm run selftest:p35b` runs production
+Studio/HTTP/storage and actual MCP with the explicit `SamplingFixtureEngine`.
+It exercises import/folder safety, trim/history, FX, capture/Keep, chops/scenes and
+save/reopen, and writes `docs/p35b-*.png`. It is included in CI, but does not validate
+physical input or Windows audio. Do not introduce production fixture switches or
+another browser playback authority. New source/capture schemas are in `sampling.ts`;
+managed storage is `user-audio.ts`, capture lifecycle `capture.ts`, native buffers
+`sampling-engine.ts` and bounded worker analysis `audio-worker.ts`.
+
 P3 development is stacked on the unmerged P2.6 branch. Read
 [the P3 contract and validation limits](docs/p3-composition-performance.md).
 `npm run selftest:p3` runs the production Studio/MCP journey with explicit cycle
@@ -55,7 +66,7 @@ Outfit and DM Sans are bundled locally, with no font CDN dependency.
 
 - **Studio changes:** `npm run build`, then refresh `/studio`. For hot reload,
   keep the normal application running and use `npm run dev:studio`; Vite proxies
-  `/state`, `/cmd`, `/clock`, `/projects`, `/sounds` and `/recordings` to `127.0.0.1:3737` (override with
+  `/state`, `/cmd`, `/clock`, `/projects`, `/sounds`, `/audio` and `/recordings` to `127.0.0.1:3737` (override with
   `TIDAL_DASH_PORT`). Vite is development-only. Production uses the existing service.
 - **Studio browser regression:** `npm run selftest:studio` checks the built frontend
   in Chromium against real project/storage services, fake audio, the classic UI,

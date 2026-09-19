@@ -16,13 +16,13 @@ export function SoundLibrary({ track }: { track?: Track }) {
   const banks = useMemo(() => [...new Set(sounds.map(s => s.bank))], [sounds]);
   const filtered = sounds.filter(s => (!bank || bank === s.bank) && `${s.label} ${s.file} ${s.bank}`.toLowerCase().includes(search.toLowerCase()));
   const clip = state.project.clips.find(c => c.id === track?.activeClipId);
-  const current = clip?.kind === "steps" && state.project.assets.find(a => a.id === clip.assetId);
+  const current = clip?.kind === "steps" ? state.project.assets.find(a => a.id === clip.assetId) : undefined;
   const disabled = !connection.connected || !!connection.busy;
   return <div className="library-content sound-browser">
     <div className={`sound-target ${accent(track?.slot ?? 1)}`}>
       <span className="eyebrow">CHOOSING FOR</span>
       <h3>{track ? trackName(track.name, track.slot) : "Select an instrument"}</h3>
-      <p>{track?.source?.type === "synth" ? "Synth source · choosing a sample changes this track to samples." : current ? `${current.name} · ${current.source?.file.split("/")[1] ?? `sample ${current.index + 1}`}` : "Select a visual rhythm to replace its sound."}</p>
+      <p>{track?.source?.type === "synth" ? "Synth source · choosing a sample changes this track to samples." : current?.audio ? `${current.audio.originalName} · My Sounds` : current ? `${current.name} · ${current.source?.file.split("/")[1] ?? `sample ${current.index + 1}`}` : "Select a visual rhythm to replace its sound."}</p>
       {track?.source?.type !== "synth" && current && state.assets.find(a => a.id === current.id)?.status === "missing" && <p role="alert">Missing sound. Your rhythm is kept.</p>}
     </div>
     <p>Preview a sound, then put it in your groove.</p>

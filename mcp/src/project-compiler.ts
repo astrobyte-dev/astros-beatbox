@@ -1,3 +1,4 @@
+import { defaultPlayback } from "./sampling.js";
 import { compileFxAutomation } from "./fx-automation.js";
 import { definition } from "./sound-lab.js";
 import { modulationControls } from "./sound-lab-engine.js";
@@ -37,6 +38,14 @@ export function compileClip(p: ProjectDocument, c: Clip): string {
   }
   for (const a of automation.filter(a => a.clipId !== null || !automation.some(b => b.clipId === c.id && b.parameter === a.parameter)).sort((a, b) => a.parameter.localeCompare(b.parameter))) {
     body += (a.parameter === "gain" ? " |* gain " : a.parameter.startsWith("synth.") ? ` # pF "abx${a.parameter.slice(6)}" ` : ` # ${a.parameter} `) + curve(a);
+  }
+  if (!synth && (c.playback || c.slices?.length)) {
+    const v = c.playback ?? defaultPlayback();
+    const regions = c.steps.map((_, i) => c.slices?.find(s => s.id === c.sliceSteps?.[i]) ?? v);
+    body += ' # begin "' + regions.map(s => number(s.start)).join(" ") + '" # end "' + regions.map(s => number(s.end)).join(" ") + '"';
+    body += ' |* speed ' + number((v.reverse ? -1 : 1) * 2 ** (v.pitch / 12));
+    body += ' # pF "abxattack" ' + number(v.attack) + ' # pF "abxrelease" ' + number(v.release);
+    if (v.mode === "loop") body = `slow ${number(v.beats / p.tempo.beatsPerCycle)} $ ${body}`;
   }
   return c.swing ? `swingBy ${number(c.swing)} 8 $ ${body}` : body;
 }

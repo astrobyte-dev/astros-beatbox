@@ -13,8 +13,8 @@ A free musical playground for Windows. **Play with sound.** Start a groove, chan
 
 P2.5 is complete. See [HANDOFF.md](HANDOFF.md) for the accepted checkpoint,
 Windows laptop setup and next-task boundary. [P2.6 portability](tasks/TASK-2.6.md)
-is the portability base; its native-audio and Windows gates remain open. P3 and
-P3.5A implementation are stacked on that base with native acceptance still pending.
+is the portability base; its native-audio and Windows gates remain open. P3,
+P3.5A and P3.5B implementations are stacked on that base with native acceptance still pending.
 
 ## Screenshots
 
@@ -50,6 +50,35 @@ Each instrument gets its own wavelength colour and a **live waveform of its own 
 - **Save / load sets**, **record-to-WAV**, live **audio-device switcher** (speakers ↔ headphones)
 - **Set Loop** — freeze the current beat into one `LOOP_` channel and build on top
 - Loop-progress bar, track timer, keyboard shortcuts, built-in cheat sheet, "Surprise me"
+
+---
+
+## Capture & Sampling Lab (P3.5B)
+
+In Studio, open **My Sounds → Add Files / Add Folder**, review the selection, then
+import. Supported audio is PCM16 mono/stereo WAV, up to 15 minutes / 256 MiB per
+sound. Preview, favorite, tag or collect sounds; **Add track** or **Use on track**
+brings one into your groove.
+
+Open the Sound Lab **Sample** tab to trim, reverse, pitch, shape the envelope and
+chop into playable regions. Edits keep the original intact and support Undo/Redo.
+Pitch changes speed/duration. **Loop phrase** sets the pad pattern's repeat length;
+it does not stretch audio to match tempo. Existing track FX process imported and
+retained captured sounds.
+
+**Capture** records an external input separately from project Recording. Pause
+playback and stop recording, select the input, then **Prepare input** (restarts
+audio). Monitoring starts off. Check input level, Record, Stop, preview and
+**Keep as Sample**. Captures are dry after input gain, mono, up to five minutes.
+Use headphones for monitoring. System **Stop audio** releases prepared input.
+Native input/audio behavior is still pending hardware acceptance on Ubuntu/Windows;
+the completed browser workflow uses deterministic fixtures.
+
+Managed audio lives in the project store's `audio/` directory. Copy that directory
+and its sidecars with your projects when moving machines: `.abx.json` references
+sound identities but does not embed audio. Missing sounds stay missing until the
+exact original is relinked. Musical Undo never deletes your retained sounds.
+See the [complete report and acceptance limits](docs/p35b-capture-sampling.md).
 
 ---
 

@@ -3,6 +3,8 @@ import type { Command, CommandResult } from "./commands.js";
 import type { RecordingEntry } from "./recordings.js";
 
 export interface StudioState {
+  capture?: ReturnType<import("./capture.js").Capture["snapshot"]>;
+  input?: { configuration: import("./capture.js").InputConfiguration | null; devices: string[]; enumeration: boolean; explanation: string };
   project: ProjectDocument;
   sessionId: string;
   generation: number;
@@ -122,7 +124,7 @@ export class StudioClient {
         recording,
         recordingUnconfirmed,
         recPath,
-        recordingState, recordings, recordingWarning, preview,
+        recordingState, recordings, recordingWarning, preview, capture, input,
         history,
         workspace,
         projectRuntime,
@@ -141,7 +143,7 @@ export class StudioClient {
         recording,
         recordingUnconfirmed,
         recPath,
-        recordingState, recordings, recordingWarning, preview,
+        recordingState, recordings, recordingWarning, preview, capture, input,
         history,
         workspace,
         projectRuntime,
@@ -192,7 +194,7 @@ export class StudioClient {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...command,
-          ...(!command.cmd.startsWith("preview.") && command.cmd !== "record.stop" ? { projectId: base.id, revision: base.revision } : {}),
+          ...(!command.cmd.startsWith("preview.") && !command.cmd.startsWith("capture.") && !["audio.preview", "audio.details", "audio.import", "record.stop"].includes(command.cmd) ? { projectId: base.id, revision: base.revision } : {}),
           ...(command.cmd === "record.start" ? { expectedGeneration: this.state?.generation } : {}),
           operationId: globalThis.crypto.randomUUID(),
           sessionId: base.sessionId,

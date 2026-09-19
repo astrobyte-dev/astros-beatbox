@@ -1,3 +1,6 @@
+import { UserAudioLibrary } from "./user-audio.js";
+import { Capture, type InputConfiguration } from "./capture.js";
+import { ManagedAudioBuffers, isUserAudio } from "./sampling-engine.js";
 import { STOP_FX_AUTOMATION } from "./fx-automation.js";
 import { rackCommand } from "./sound-lab-engine.js";
 import { randomUUID, createHash } from "node:crypto";
@@ -10,7 +13,7 @@ import { ProjectService, ProjectConflict } from "./project-service.js";
 import { ProjectStorage } from "./project-storage.js";
 import { clone, emptyProject, uid, type ProjectDocument, type ProjectEdit, type Parameter } from "./project.js";
 import { projectSlots, compileArrangement, mixerCommand } from "./project-compiler.js";
-import { libraryAsset, resolveSample, soundLibrary } from "./sound-library.js";
+import { libraryAsset, resolveSample, soundLibrary, sampleFiles } from "./sound-library.js";
 import { Preview } from "./preview.js";
 import { RecordingCatalog, validateWav } from "./recordings.js";
 import { emptyPerformance, sceneProjection, arrangementPosition, preparedBatch, preparedCode, parseCycle, type Boundary } from "./performance.js";
@@ -18,6 +21,9 @@ import type { Asset } from "./sound-library.js";
 import { captureRoute, captureInput, finishRecorder, recordingWarning, type RecordingDiagnostics } from "./recording-diagnostics.js";
 
 export interface CommandEngine {
+  inputDevices?: string[];
+  inputConfiguration?: InputConfiguration;
+  configureInput?(configuration: InputConfiguration): Promise<void>;
   audioCapabilities?: { deviceSelection: boolean; configuration: string };
   generation: number; running: boolean; state: string; error: string | null;
   ensureBooted(): Promise<void>; reboot(): Promise<void>; assertGeneration(generation: number): void;
@@ -26,7 +32,7 @@ export interface CommandEngine {
   tidal: { clock?(): Promise<number>; eval(code: string, id?: string): Promise<EvalResult>; hush(id?: string): Promise<EvalResult> };
   sclang: { eval(code: string, id?: string): Promise<EvalResult>; evalRoutine(code: string, id?: string): Promise<EvalResult> };
 }
-export interface ApplicationPaths { sets: string; recordings: string; device: string; projects?: string; recovery?: string; samples?: string }
+export interface ApplicationPaths { inputMeterPort?: number; sets: string; recordings: string; device: string; projects?: string; recovery?: string; samples?: string }
 export interface LiveRig extends RigState { paused: boolean; stopped: boolean; recording: boolean; recPath: string; synchronized: boolean }
 
 // HTTP and MCP share the P0a queue. The rig's musical fields are a compatibility
@@ -42,6 +48,9 @@ export class Application {
   readonly project: ProjectService;
   readonly recordings: RecordingCatalog;
   readonly preview: Preview;
+  readonly userAudio: UserAudioLibrary;
+  readonly capture: Capture;
+  private userBuffers: ManagedAudioBuffers;
   private recordingId: string | null = null;
   private recordingGeneration: number | null = null;
   private recorderUncertain = false;
@@ -61,6 +70,9 @@ export class Application {
   private external = false;
   readonly runtime = { appliedRevision: null as number | null, appliedProjectId: null as string | null, song: false, error: null as string | null };
   constructor(readonly engine: CommandEngine, private paths: ApplicationPaths) {
+    this.userAudio = new UserAudioLibrary(path.join(paths.projects ?? paths.sets, "audio"));
+    this.userBuffers = new ManagedAudioBuffers(engine, this.userAudio);
+    this.capture = new Capture(engine, path.join(paths.recordings, "captures"), this.userAudio, takeId => { void this.dispatch({ cmd: "capture.stop", value: takeId }); }, paths.inputMeterPort);
     this.recordings = new RecordingCatalog(paths.recordings);
     this.preview = new Preview(engine, paths.samples);
     this.project = new ProjectService(paths.projects && paths.recovery ? new ProjectStorage(paths.projects, paths.recovery) : undefined);
@@ -72,7 +84,13 @@ export class Application {
       this.recordings.fail(this.recordingId, "Audio engine ended before this take could be finalized.", "interrupted");
       this.rig.recording = false;
     }
-    return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.project.assets(this.paths.samples), preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
+    return { project: this.project.document, history: this.project.history, workspace: this.project.workspace, projectRuntime: { ...this.runtime, externallyModified: this.external, performance: { ...this.performance }, appliedGeneration: this.appliedGeneration, queued: this.waiting }, assets: this.assetStates(), capture: this.capture.snapshot(), input: { configuration: this.engine.inputConfiguration ?? null, devices: this.engine.inputDevices ?? [], enumeration: !!this.engine.audioCapabilities?.deviceSelection, explanation: this.engine.audioCapabilities?.configuration ?? "Input device enumeration unavailable in this backend" }, preview: this.preview.snapshot(), recordingState: this.recordingId ? this.recordings.get(this.recordingId) : null, recordings: this.recordings.list(), recordingWarning: this.recordings.warning };
+  }
+  private assetStates(p = this.project.document) {
+    return this.project.assets(this.paths.samples, p).map(a => {
+      const asset = p.assets.find(x => x.id === a.id)!;
+      return isUserAudio(asset) ? { ...a, status: this.userAudio.status(a.id) } : a;
+    });
   }
   sounds() { return soundLibrary(this.paths.samples); }
   async drain() { await this.queue; }
@@ -156,7 +174,11 @@ export class Application {
     const active = new Set(song ? p.arrangement.flatMap(a => Object.values(p.scenes.find(s => s.id === a.sceneId)!.clips)) : p.tracks.map(t => t.activeClipId));
     const assets = new Set(p.clips.filter(c => active.has(c.id) && c.kind === "steps" && p.tracks.find(t => t.id === c.trackId)?.source?.type !== "synth").map(c => (c as { assetId: string }).assetId));
     const checks: string[] = [];
-    for (const a of p.assets) if (assets.has(a.id) && a.kind === "sample" && a.source && resolveSample(a, this.paths.samples).status === "available") {
+    for (const a of p.assets) if (assets.has(a.id) && isUserAudio(a) && this.userAudio.status(a.id) === "available") {
+      try { await this.userBuffers.ensure(a, id); }
+      catch (e) { if (this.userAudio.status(a.id) !== "missing") throw e; }
+    }
+    for (const a of p.assets) if (!isUserAudio(a) && assets.has(a.id) && a.kind === "sample" && a.source && resolveSample(a, this.paths.samples).status === "available") {
       this.engine.assertSampleLoaded?.(a);
       const index = resolveSample(a, this.paths.samples).index;
       const file = scStr(path.resolve(this.paths.samples!, a.source.file).replace(/\\/g, "/"));
@@ -169,12 +191,12 @@ export class Application {
   private audioSlots(p: ProjectDocument, song = this.runtime.song): Record<string, string> {
     // SuperDirt wraps out-of-range sample indices. Silence explicitly missing
     // references instead of allowing that silent substitution, retaining the document.
-    const missing = new Set(this.project.assets(this.paths.samples, p).filter(a => a.status === "missing").map(a => a.id));
+    const missing = new Set(this.assetStates(p).filter(a => a.status === "missing").map(a => a.id));
     // A file reference is saved intact but needs an explicitly registered library
     // before playback. Never accidentally play a built-in with the same name.
     for (const a of p.assets) if (a.kind === "file") missing.add(a.id);
     const safe = clone(p), clips = new Set(safe.clips.filter(c => c.kind === "steps" && safe.tracks.find(t => t.id === c.trackId)?.source?.type !== "synth" && missing.has(c.assetId)).map(c => c.id));
-    for (const a of safe.assets) if (a.kind === "sample") a.index = resolveSample(a, this.paths.samples).index;
+    for (const a of safe.assets) if (a.kind === "sample" && !isUserAudio(a)) a.index = resolveSample(a, this.paths.samples).index;
     for (const t of safe.tracks) if (t.activeClipId && clips.has(t.activeClipId)) t.activeClipId = null;
     for (const s of safe.scenes) for (const k of Object.keys(s.clips)) if (s.clips[k] && clips.has(s.clips[k]!)) s.clips[k] = null;
     return song ? compileArrangement(safe) : projectSlots(safe);
@@ -183,10 +205,11 @@ export class Application {
     if (this.external) { this.runtime.appliedRevision = null; return; }
     if (!this.engine.running) { this.runtime.appliedRevision = null; this.rig.synchronized = false; return; }
     const performing = this.performanceDocument !== null;
-    const before = this.audioSlots(previous), after = this.audioSlots(next);
+    const before = this.audioSlots(previous); let after = this.audioSlots(next);
     const mixing = this.managed(next) || this.managed(previous);
     try {
       if (!performing && !this.rig.stopped && !this.rig.paused && (force || JSON.stringify(before) !== JSON.stringify(after))) await this.verifySamples(next, id);
+      after = this.audioSlots(next);
       if (force || rackCommand(next, !this.rig.stopped && !this.rig.paused) !== rackCommand(previous, !this.rig.stopped && !this.rig.paused)) await this.sc(rackCommand(next, !this.rig.stopped && !this.rig.paused), id, true);
       if (mixing && (force || mixerCommand(next) !== mixerCommand(previous))) await this.sc(mixerCommand(next), id, true);
       const solo = next.tracks.some(t => t.mixer.solo);
@@ -233,7 +256,55 @@ export class Application {
     }
   }
   private async execute(c: Command, id: string): Promise<{ msg: string; output?: string; acknowledgement?: EvalResult["acknowledgement"] }> {
+    if (["audio.stop", "audio.restart", "runtime.restart", "runtime.quit", "reset", "setdevice"].includes(c.cmd)) await this.capture.beforeReset(id);
     if (["audio.stop", "audio.restart", "runtime.restart", "runtime.quit"].includes(c.cmd)) return this.controlLifecycle(c, id);
+    if (c.cmd === "audio.import") { const r = await this.userAudio.importFile(String(c.value), "user", c.assetId); return { msg: r.duplicate ? "Sound already in My Sounds" : "Sound added to My Sounds", output: r.entry.id }; }
+    if (c.cmd === "audio.details") { this.userAudio.update(c.assetId!, c.libraryRevision!, c.details!); return { msg: "Sound details saved" }; }
+    if (c.cmd === "audio.add") {
+      const p = this.project.document, asset = p.assets.find(a => a.id === c.value) ?? this.userAudio.asset(String(c.value));
+      await this.userAudio.verify(asset.id);
+      const slot = Array.from({ length: 12 }, (_, i) => i + 1).find(slot => !p.tracks.some(t => t.slot === slot));
+      if (!slot) throw new Error("All 12 sample channels are in use");
+      const trackId = uid(), clipId = uid(), scene = p.scenes.find(s => s.id === (this.project.workspace.selectedSceneId ?? p.sceneOrder[0]))!;
+      const name = this.userAudio.get(asset.id).details.name;
+      const next = this.project.prepare([
+        { type: "asset.put", asset },
+        { type: "track.add", track: { id: trackId, name, slot, channel: slot - 1, activeClipId: clipId, source: { type: "sample" }, mixer: { level: 0.7, balance: 0, mute: false, solo: false } } },
+        { type: "clip.put", clip: { id: clipId, name, trackId, kind: "steps", assetId: asset.id, steps: [1, ...Array(15).fill(0)], swing: 0, parameters: {} } },
+        { type: "scene.put", scene: { ...scene, clips: { ...scene.clips, [trackId]: clipId } } },
+      ]);
+      await this.preview.stop(id); await this.changeProject(next, { ...c, label: "Add user sound" }, id); return { msg: "Sound added as a playable instrument", output: trackId };
+    }
+    if (c.cmd === "audio.assign") {
+      const asset = this.project.document.assets.find(a => a.id === c.value) ?? this.userAudio.asset(String(c.value));
+      await this.userAudio.verify(asset.id);
+      const next = this.project.prepare([{ type: "asset.put", asset }, { type: "sound.set", clipId: c.clipId!, assetId: asset.id }]);
+      await this.preview.stop(id); await this.changeProject(next, { ...c, label: "Assign user sound" }, id); return { msg: "Sound assigned; rhythm and FX retained" };
+    }
+    if (c.cmd === "audio.preview") {
+      const asset = this.project.document.assets.find(a => a.id === c.value);
+      let file: string;
+      if (asset && !isUserAudio(asset)) {
+        if (asset.kind !== "sample" || !this.paths.samples || resolveSample(asset, this.paths.samples).status !== "available") throw new Error("Sample is missing; its region is retained");
+        await this.engine.ensureBooted(); this.engine.assertSampleLoaded?.(asset);
+        file = path.join(this.paths.samples, asset.reference, sampleFiles(this.paths.samples, asset.reference)[resolveSample(asset, this.paths.samples).index]);
+      } else file = await this.userAudio.verify(String(c.value));
+      await this.preview.playFile(file, String(c.value), id, c.playback); return { msg: "Preview playing outside project recording" };
+    }
+    if (c.cmd === "capture.prepare") {
+      if (!this.engine.configureInput) throw new Error("Audio input is unavailable in this runtime");
+      if (this.rig.recording || this.recorderUncertain || this.capture.snapshot().activeId || (!this.rig.stopped && !this.rig.paused && this.project.document.tracks.some(t => t.activeClipId))) throw new Error("Stop playback and recording before preparing input; this restarts audio");
+      await this.capture.beforeReset(id);
+      await this.engine.ensureBooted();
+      await this.engine.configureInput({ enabled: true, device: c.device!, channel: c.channel! });
+      await this.restore(id); await this.capture.prepare(c.channel!, id); return { msg: "Input prepared; monitoring is off" };
+    }
+    if (c.cmd === "capture.controls") { await this.capture.controls(c.gain!, c.monitor!, id); return { msg: c.monitor ? "Monitoring on — use headphones to avoid feedback" : "Monitoring off" }; }
+    if (c.cmd === "capture.start") { const take = await this.capture.start(String(c.value), id); return { msg: "Capturing dry input (up to five minutes)", output: take }; }
+    if (c.cmd === "capture.stop") { await this.capture.stop(String(c.value), id); return { msg: "Capture finalized; preview and Keep as Sample" }; }
+    if (c.cmd === "capture.keep") { const entry = await this.capture.keep(String(c.value)); return { msg: "Capture kept in My Sounds", output: entry.id }; }
+    if (c.cmd === "capture.discard") { await this.preview.stop(id); await this.capture.discard(String(c.value)); return { msg: "Unretained capture discarded" }; }
+    if (c.cmd === "capture.preview") { await this.preview.playFile(await this.capture.previewFile(String(c.value)), String(c.value), id); return { msg: "Previewing capture" }; }
     if (c.cmd === "preview.play") { await this.preview.play(String(c.value), id); return { msg: "Preview playing through your audio output" }; }
     if (c.cmd === "preview.stop") { await this.preview.stop(id); return { msg: "Preview stopped" }; }
     if (c.cmd === "sound.replace") {
@@ -257,7 +328,7 @@ export class Application {
       if (wasExternal && (this.rig.recording || this.recorderUncertain)) await this.finishRecording(id);
       this.external = false; this.clearPerformance(); this.runtime.song = false;
       try {
-        if (wasExternal) await this.engine.reboot(); else await this.engine.ensureBooted();
+        if (wasExternal) { await this.capture.beforeReset(id); await this.engine.reboot(); } else await this.engine.ensureBooted();
         this.rig.stopped = false; this.rig.paused = false;
         await this.restore(id);
       } catch (e) { this.external = wasExternal; this.rig.synchronized = false; throw e; }

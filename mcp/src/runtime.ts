@@ -33,7 +33,7 @@ export async function startRuntime(port = DASHBOARD_PORT) {
   let closed = false, audioClosed = false;
   const dashboard = startDashboard(port, DASHBOARD_HTML, () => app ? state() : { status: "preparing" },
     () => ({ cycle: meter.cycle, cps: meter.cps, lead: meter.lead, age: Date.now() - meter.cycleAt }),
-    c => !app ? Promise.resolve({ ok: false as const, operationId: "runtime", sessionId: "preparing", generation: engine.generation, code: "BUSY", error: "Runtime is preparing" }) : app.dispatchExternal(c), { sounds: () => app?.sounds() ?? [], get recordings() { return app?.recordings; },
+    c => !app ? Promise.resolve({ ok: false as const, operationId: "runtime", sessionId: "preparing", generation: engine.generation, code: "BUSY", error: "Runtime is preparing" }) : app.dispatchExternal(c), { audio: () => app ? { library: app.userAudio, capture: app.capture, sessionId: app.sessionId, meter: () => ({ available: app.capture.snapshot().inputReady && Date.now() - meter.input.at < 500, peak: meter.input.peak }) } : undefined, sounds: () => app?.sounds() ?? [], get recordings() { return app?.recordings; },
       system: () => health ? health.snapshot() : Promise.resolve({ state: "Preparing runtime" }),
       logs: query => ({ sessionId: app?.sessionId, entries: logs.read(query.get("source") ?? undefined, Math.max(0, Number(query.get("after")) || 0), query.get("diagnostic") === "1"), cursor: logs.lastId }),
       bridge: input => health.bridge(input),
@@ -56,7 +56,7 @@ export async function startRuntime(port = DASHBOARD_PORT) {
     try { await meter.start(METER_UDP_PORT); } catch (e) { logs.add("telemetry", String(e), "error"); }
     // Only the successful port owner may open recovery/catalogue storage. A
     // losing startup must not mark another runtime's active take interrupted.
-    app = new Application(engine, { sets: SETS_DIR, recordings: RECORDINGS_DIR, device: AUDIO_DEVICE_FILE, projects: PROJECTS_DIR, recovery: RECOVERY_DIR, samples: DIRT_SAMPLES_DIR });
+    app = new Application(engine, { inputMeterPort: meter.port ?? METER_UDP_PORT, sets: SETS_DIR, recordings: RECORDINGS_DIR, device: AUDIO_DEVICE_FILE, projects: PROJECTS_DIR, recovery: RECOVERY_DIR, samples: DIRT_SAMPLES_DIR });
     health = new RuntimeHealth(engine, meter, app, (dashboard.address() as { port: number }).port, logs);
     app.lifecycleHooks = {
       log: (source, message, error) => logs.add(source, message, error ? "error" : "info", engine.generation),
